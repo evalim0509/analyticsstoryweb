@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.1");
+const worker = new Worker("assets/worker.js?v=2026-11-17.2");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -738,7 +738,8 @@ async function renderPick() {
   root.replaceChildren(
     h("h1", { class: "ask-big" }, "What do you want to understand?"),
     options.length ? h("p", { class: "frame" }, "Pick one. You can change it at any time.") : null,
-    options.length ? h("div", { class: "subjects" }, options.map((o) => h("button", { class: "subject", onclick: () => choose(o) }, h("b", {}, o.label), h("span", {}, o.detail))))
+    options.length ? h("div", { class: "subjects arrive" }, options.map((o, i) => h("button", { class: "subject", style: `--i:${i}`, onclick: () => choose(o) },
+        h("span", { class: "n" }, i + 1), h("b", {}, o.label), h("span", { class: "d" }, o.detail), h("span", { class: "go", "aria-hidden": "true" }))))
       : h("p", { class: "frame" }, "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further."),
     tidyBox);
 }
@@ -783,7 +784,7 @@ async function renderStory() {
     h("p", { class: "frame controls" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label), period ? [" in ", period] : null, filter ? [" for ", filter] : null),
     h("div", { class: "print-title" }, h("h1", {}, st.title), h("p", {}, `Prepared ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} from ${st.source}`)),
     caution ? h("p", { class: "caution" }, caution.why + " ", h("button", { class: "link", onclick: () => show("data") }, "Review now")) : null,
-    h("div", { class: "scards" }, cards),
+    h("div", { class: "scards" + (S.story.arrived ? "" : " arrive") }, cards),
     h("div", { class: "story-foot row" },
       h("button", { class: "secondary", onclick: async () => {
         try { await navigator.clipboard.writeText(st.summary); } catch { const t = h("textarea", { style: "position:fixed;opacity:0" }, st.summary); document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); }
@@ -791,8 +792,8 @@ async function renderStory() {
       } }, "Copy summary"),
       h("button", { class: "secondary", onclick: () => window.print() }, "Print briefing"),
       h("span", { class: "grow" }),
-      yearSel,
-      h("span", { class: "muted", style: "font-size:13px" }, "Worked out from your files only. Nothing is guessed.")));
+      S.explore ? yearSel : null));
+  S.story.arrived = true;
   openCard(S.story.open, false);
 }
 
@@ -809,13 +810,37 @@ function openCard(key, byHand) {
     if (on) {
       const c = S.story.data.cards.find((x) => x.key === key), canvas = el.querySelector("canvas");
       if (canvas) requestAnimationFrame(() => (c.forecast ? drawForecast(canvas, c.forecast, true) : drawChart(canvas, { ...c.chart, emphasis: key === "what" ? "last" : null, animate: true })));
-      // once the cards have finished gliding, bring the opened one into view if it ended up off screen
-      if (byHand) setTimeout(() => {
-        const top = el.getBoundingClientRect().top;
-        if (S.story.open === key && (top < 70 || top > window.innerHeight * 0.6)) window.scrollTo({ top: window.scrollY + top - 84, behavior: "smooth" });
-      }, 700);
+      if (byHand) followCard(el, key);
     }
   });
+}
+
+// While the cards glide, keep the opened one comfortably in view: a slow, eased scroll that follows it
+// frame by frame (the card moves as the others close), and stops as soon as the reader scrolls themselves.
+let followStop = null;
+function followCard(el, key) {
+  if (followStop) followStop();
+  const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let live = true, speed = 0;
+  const started = performance.now();
+  const stop = () => { live = false; ["wheel", "touchstart", "keydown"].forEach((t) => window.removeEventListener(t, stop)); };
+  followStop = stop;
+  ["wheel", "touchstart", "keydown"].forEach((t) => window.addEventListener(t, stop, { passive: true }));
+  const step = (now) => {
+    if (!live || S.story.open !== key || !el.isConnected) return stop();
+    const top = el.getBoundingClientRect().top, hi = 84, lo = Math.max(hi, window.innerHeight * 0.3);
+    const gap = top < hi ? top - hi : top > lo ? top - lo : 0;
+    const age = now - started;
+    if (calm) { if (age > 60) { window.scrollBy(0, gap); return stop(); } }
+    else {
+      speed += (gap * 0.055 - speed) * 0.12;          // ease in to the move, ease out as the gap closes
+      if (Math.abs(speed) > 0.05) window.scrollBy(0, speed);
+      if (age > 1100 && Math.abs(gap) < 1 && Math.abs(speed) < 0.3) return stop();
+      if (age > 4000) return stop();
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 // ---- the small round buttons on the edge of an open card: change the number, the grouping or the chart
@@ -825,20 +850,20 @@ const RAIL_ICON = {
   chart: "M3.5 13V8.5M8 13V3M12.5 13V6",
 };
 function closeRailMenus(except) {
-  document.querySelectorAll(".rail-item.on").forEach((el) => {
+  document.querySelectorAll(".edge-item.on").forEach((el) => {
     if (el === except) return;
     el.classList.remove("on");
     el.querySelector("button").setAttribute("aria-expanded", "false");
   });
 }
-document.addEventListener("click", (e) => { if (!e.target.closest(".rail-item")) closeRailMenus(); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".edge-item")) closeRailMenus(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRailMenus(); });
 
 function railButton(icon, label, heading, items, pick) {
-  const btn = h("button", { class: "rail-btn", title: label, "aria-label": label, "aria-haspopup": "true", "aria-expanded": "false" });
+  const btn = h("button", { class: "edge-btn", title: label, "aria-label": label, "aria-haspopup": "true", "aria-expanded": "false" });
   btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="${RAIL_ICON[icon]}"/></svg>`;
-  const item = h("div", { class: "rail-item" }, btn,
-    h("div", { class: "rail-menu", role: "group", "aria-label": label },
+  const item = h("div", { class: "edge-item" }, btn,
+    h("div", { class: "edge-menu", role: "group", "aria-label": label },
       h("p", {}, heading),
       items.map((it) => h("button", { "aria-pressed": String(!!it.on), onclick: () => { closeRailMenus(); if (!it.on) pick(it.key); } }, it.label))));
   btn.addEventListener("click", () => {
@@ -860,7 +885,7 @@ function storyCard(c, n, st, retell) {
   if (c.chart_types && c.chart_types.length > 1) rail.push(railButton("chart", "Change the chart", "Chart",
     c.chart_types.map((t) => ({ key: t.key, label: t.label, on: t.key === c.chart_type })), (k) => retell({ charts: { ...(spec.charts || {}), [c.key]: k } })));
   const body = h("div", { class: "sbody" });
-  if (rail.length) body.append(h("div", { class: "rail" }, rail));
+  if (rail.length) body.append(h("div", { class: "edge" }, rail));
   if (c.more.length) body.append(h("p", { class: "more" }, c.more.join(" ")));
   if (c.actions) body.append(h("ol", { class: "actions" }, c.actions.map((a) => h("li", {}, h("strong", {}, a.do), h("span", {}, a.why)))));
   if (c.note) body.append(h("p", { class: "fine" }, c.note));
@@ -868,7 +893,7 @@ function storyCard(c, n, st, retell) {
   if (c.table) body.append(renderTable(c.table.columns, c.table.rows, null, { dash: true }));
   body.append(h("details", { class: "how" }, h("summary", {}, "How I got this"), h("div", { class: "box" }, h("ol", {}, c.steps.map((s) => h("li", {}, s))),
     c.sql ? h("details", { style: "margin-top:12px" }, h("summary", {}, "Technical detail"), h("p", { class: "muted" }, "The main query that was run on your data, for an analyst who wants to verify it."), h("code", {}, c.sql)) : null)));
-  return h("article", { class: "scard", "data-key": c.key },
+  return h("article", { class: "scard", "data-key": c.key, style: `--i:${n - 1}` },
     h("button", { class: "shead", "aria-expanded": "false", title: c.ask, onclick: () => openCard(S.story.open === c.key ? null : c.key, true) },
       h("span", { class: "q" }, h("span", { class: "n" }, n), c.word), h("span", { class: "s" }, c.sentence), h("span", { class: "tog", "aria-hidden": "true" })),
     h("div", { class: "swrap" }, h("div", { class: "sclip" }, body)));

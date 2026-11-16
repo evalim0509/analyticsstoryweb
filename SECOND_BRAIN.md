@@ -136,8 +136,27 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R42. How keeps its rule-based steps and the forecast, with the forecast
   clearly labelled as an estimate, not a fact.
 - R43. Figures carry no currency symbol.
-- R44. The reader chooses the month the business year starts in (default
-  January). The choice is remembered in that browser.
+- R44. Quarters and years follow the normal calendar year (Q1 = January to
+  March). There is no year-start choice on the story page. A quiet "Business
+  year starts in" choice appears at the foot of the story only while "Explore
+  further" is on, for anyone who needs a different start. (Changed 2026-11-17:
+  it was first shown to every reader.)
+- R45. The story footer no longer says "Worked out from your files only.
+  Nothing is guessed." The start page no longer has the three explanatory
+  notes under the drop box. Behaviour is unchanged; each card still has "How I
+  got this".
+- R46. Story cards look like cards: white, thin outline, rounded corners, with
+  space between them. This replaces "few lines and boxes" in R30 for the cards.
+- R47. Card motion: cards arrive one by one; a card lifts slightly when
+  hovered or pressed; the tapped card expands in place while the others dim and
+  draw in; the content then flows in piece by piece. The automatic scroll that
+  keeps the opened card in view is slow and eased, and stops if the reader
+  scrolls.
+- R48. Glass feel: clean white cards on the plain light background; only the
+  top bar is frosted glass. (Owner chose this over tinted or strong glass.)
+- R49. The app must work well on a phone (iPhone size) on every screen.
+- R50. The choices on "What do you want to understand?" use the same card
+  design and motion. Tapping one goes straight to the story.
 
 ## Business knowledge
 
@@ -202,6 +221,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | Story and subject choices restyled as outlined white cards with arrival, lift, expand and flow-in motion; slower eased auto-scroll; frosted top bar; phone layout pass; footer note and start-page notes removed; business-year choice moved behind "Explore further". Fixed the data check's side list, whose layout had been disturbed by the card edge buttons sharing its style name. |
 | 2026-11-17 | Renamed to Gist. Added the Why card; cards the data cannot support are hidden; glide animation and numbered cards; edge buttons to change the number, grouping and chart; sentences rewritten in a boardroom voice; forecast labelled as an estimate; reader-chosen business year start; header privacy badge removed; "A look at ...". Targets no longer compared with the wrong number. |
 | 2026-11-16 | Fixed "engine could not start" after an update: the list of engine files now comes from `engine/manifest.json`, fetched fresh every time, and all app files carry a version stamp. Project also copied to the `evalim0509/analyticsstoryweb` repository. |
 | 2026-11-16 | Branch `claude/story-cards`: five-card story (What, Who, When, Which, How) as the main screen, subject picker, one-click tidy, period and filter controls, copy summary, print briefing. Existing tools moved behind "Explore further". Sample targets made realistic. |
