@@ -46,10 +46,22 @@ assert call("ml_run", kind="unusual", spec={"dataset": ID["Orders"]})["table"]["
 call("set_glossary", entries=[{"term": "takings", "means": "Sales Amount"}])
 assert call("ask", question="total takings")["type"] == "number"
 o = call("story_options"); assert o["options"][0]["label"] == "Sales Amount", o
-s5 = call("story_build", spec={"dataset": o["options"][0]["dataset"], "value": "Sales Amount"})
-assert [c["key"] for c in s5["cards"]] == ["what", "who", "when", "which", "how"] and all(c["sentence"] for c in s5["cards"])
-assert s5["period"] == "quarter" and "target" in " ".join(s5["cards"][0]["more"]) and s5["cards"][4]["actions"]
+s6 = call("story_build", spec={"dataset": o["options"][0]["dataset"], "value": "Sales Amount"})
+K = {c["key"]: c for c in s6["cards"]}
+assert list(K) == ["what", "who", "when", "which", "why", "how"] and all(c["sentence"] for c in s6["cards"])
+assert s6["period"] == "quarter" and "target" in " ".join(K["what"]["more"]) and K["how"]["actions"]
+assert "led by" in K["why"]["sentence"] and abs(sum(r[3] for r in K["why"]["table"]["rows"]) - (K["what"]["table"]["rows"][0][1] - K["what"]["table"]["rows"][1][1])) < 0.01
+assert any(a.get("estimate") for a in K["how"]["actions"]) and {m["value"] for m in s6["measures"]} >= {"Sales Amount", "Quantity", None}
 n = call("story_build", spec={"dataset": o["options"][0]["dataset"], "value": None, "period": "month", "filters": [{"field": "Region", "op": "is", "value": ["North"]}]})
-assert "Region" not in n["cards"][3]["dims"] and "North" in n["title"]
+assert "Region" not in next(c for c in n["cards"] if c["key"] == "which")["dims"] and "North" in n["title"]
+x = call("story_build", spec={"dataset": o["options"][0]["dataset"], "value": "Quantity", "fiscal_start": 4, "why": "Region", "charts": {"who": "share", "when": "bars", "why": "before"}})
+X = {c["key"]: c for c in x["cards"]}
+assert "Quantity" in X["who"]["sentence"] and X["who"]["chart"]["type"] == "share" and X["why"]["dim"] == "Region" and len(X["why"]["chart"]["series"]) == 2
+assert "target" not in " ".join(X["what"]["more"]) and not any("target" in a["do"] for a in X["how"]["actions"])   # a sales target is not applied to Quantity
+assert x["period_label"].startswith("Q2 (Jul–Sep") and x["spec"]["fiscal_start"] == 4
+# a table with no dates and nothing to group by: only What and How are told
+p = call("preview", name="plain.csv", data=b"Ref,Amount\n" + b"".join(f"R{i},{i * 3}\n".encode() for i in range(1, 41)))
+plain = call("confirm", token=p["token"])["datasets"][-1]
+assert [c["key"] for c in call("story_build", spec={"dataset": plain["id"], "value": "Amount"})["cards"]] == ["what", "how"]
 call("restore", dataset=ID["Orders"]); assert call("state")["datasets"][0]["rows"] == 1783
 print("All engine checks passed.")

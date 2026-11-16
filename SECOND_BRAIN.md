@@ -12,7 +12,7 @@ How it is used:
 - **The app reads the "Business words" table** below when it starts, so the
   chatbot understands the business's own vocabulary.
 
-Last updated: 2026-11-16
+Last updated: 2026-11-17
 
 ## Purpose
 
@@ -104,6 +104,41 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R30. Look: editorial briefing. Light background, large sentences as the main
   visual, one restrained accent colour, few lines and boxes.
 
+### Gist (2026-11-17)
+- R31. The product is named **Gist** (was Plainly).
+- R32. A sixth card, **Why**, sits between Which and How: What, Who, When, Which,
+  Why, How. Why reports which groups the change since the previous period came
+  from. It never gives outside causes, because the files do not record them.
+- R33. Only facts, no assumptions. If the data lacks what a card needs, the card
+  is hidden completely (no dates: no When; nothing that says who: no Who; no
+  earlier period or no grouping: no Why). This replaces showing a card that
+  says something is missing. Cards are renumbered so there are no gaps.
+- R34. The header no longer shows "Files stay on this computer". The behaviour
+  is unchanged (data still never leaves the browser); the smaller privacy notes
+  on the start page and the story footer stay.
+- R35. The line above the cards reads "A look at ..." (was "The story of ...").
+- R36. Cards animate with a smooth glide: the open card grows while the others
+  draw in to slim bars, each card numbered in a small circle. Reference was a
+  side-by-side expanding-cards animation; only the motion was wanted, in the
+  site's own style. Cards stay stacked top to bottom (R26 stands).
+- R37. Each card's chart and table can be changed with small round buttons on
+  the card's right edge: the number, the grouping, and the chart type. The clean
+  look comes first, so buttons show only when there is a real choice.
+- R38. Changing the number re-tells every card (the story stays about one
+  thing). Changing the grouping or chart affects only that card.
+- R39. Sentences are rebuilt from fixed templates whenever a field changes, in
+  a "boardroom brief" voice: short, confident, one main point. Example: "Sales
+  Amount reached 1.52M in Q3 2026, 8% ahead of Q2 2026 and 12% ahead of Q3 2025."
+- R40. Numbers are always totals (or a count of rows). No average option.
+- R41. Chart choices are limited to two that suit each card: line or bars for
+  When; bars or share of the total for Who and Which; the change or before and
+  after for Why.
+- R42. How keeps its rule-based steps and the forecast, with the forecast
+  clearly labelled as an estimate, not a fact.
+- R43. Figures carry no currency symbol.
+- R44. The reader chooses the month the business year starts in (default
+  January). The choice is remembered in that browser.
+
 ## Business knowledge
 
 - Main uses are **sales and customers** (revenue, orders, customers, products,
@@ -111,6 +146,8 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - Readers are upper management who want a quick read and a decision, not analysis.
 - For cost-like numbers (cost, expense, spend) a rise is the concern; for
   sales-like numbers a fall is the concern. The story's suggested steps follow this.
+- The business year does not have one fixed start month for every reader, so the
+  reader picks it (R44).
 
 Nothing else recorded yet beyond the sample data. Add things like: what each file contains, how figures are
 defined (for example "revenue excludes refunds"), reporting periods, thresholds
@@ -136,6 +173,12 @@ that matter, who uses the output.
 | 2026-11-16 | Story branch: "How" steps come from fixed rules (open data issues, distance from target, biggest fall and rise, 40%+ reliance on one group, 3-month forecast). | R24 and the no-AI rule. |
 | 2026-11-16 | Story branch: sentences use rounded figures (188K, 1.52M); tables show exact figures. | Quick reading without losing auditability. |
 | 2026-11-16 | Story branch: accent colour changed from green to ink blue, with a serif face (Source Serif 4) for sentences. | R30. |
+| 2026-11-17 | With a business year that does not start in January, quarters are written with their months, for example "Q2 (Jul–Sep 2025)", and a target year as "the year from Apr 2025". | There is no single convention for naming such a year (by its first or last calendar year), and guessing would break R33. |
+| 2026-11-17 | Sentences say "ahead of / behind" for sales-like numbers and the neutral "above / below" for cost-like numbers. | "Ahead" sounds like good news, which is wrong for a cost. |
+| 2026-11-17 | Why shows one grouping at a time. By default it is the grouping whose two largest movers explain the biggest part of all movement, preferring groupings with 3 to 20 groups. The reader can switch it. | Contributions from different groupings overlap, so mixing them in one sentence would double count. |
+| 2026-11-17 | A target or budget is only compared with the number it names ("Sales Target" with Sales Amount, never with Quantity). A target with no subject in its name is read as the main number's target. | R33. Found when changing the number became one click. |
+| 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
+| 2026-11-17 | Work for Gist was built on branch `claude/gist-story`; `main` (the live site) changes only when the owner approves. | The owner reviews before publishing. |
 | 2026-11-16 | The story project lives in its own repository, `evalim0509/analyticsstoryweb` (branch `main`). `analyticschatbotv1` keeps the original three-tab version. | Owner's choice, so the two products can evolve separately. |
 
 ## Open questions
@@ -144,9 +187,9 @@ that matter, who uses the output.
   always start fresh? Currently always fresh.
 - Largest file size the business expects? The browser engine is comfortable up
   to roughly a few hundred thousand rows.
-- Does the business use calendar quarters, or a fiscal year that starts in another month?
-- Are there fixed business definitions (fiscal year start, currency, what counts
-  as an active customer) that the chatbot should apply automatically?
+- Are there fixed business definitions (for example what counts as an active
+  customer) that the chatbot should apply automatically? Fiscal year start and
+  currency are answered (R43, R44).
 
 ## Ideas not yet built
 
@@ -159,6 +202,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | Renamed to Gist. Added the Why card; cards the data cannot support are hidden; glide animation and numbered cards; edge buttons to change the number, grouping and chart; sentences rewritten in a boardroom voice; forecast labelled as an estimate; reader-chosen business year start; header privacy badge removed; "A look at ...". Targets no longer compared with the wrong number. |
 | 2026-11-16 | Fixed "engine could not start" after an update: the list of engine files now comes from `engine/manifest.json`, fetched fresh every time, and all app files carry a version stamp. Project also copied to the `evalim0509/analyticsstoryweb` repository. |
 | 2026-11-16 | Branch `claude/story-cards`: five-card story (What, Who, When, Which, How) as the main screen, subject picker, one-click tidy, period and filter controls, copy summary, print briefing. Existing tools moved behind "Explore further". Sample targets made realistic. |
 | 2026-11-15 | First version: file import with preview, data check with one-click fixes, join suggestions, chatbot, table and chart builder, machine learning tab, sample data, this file. |

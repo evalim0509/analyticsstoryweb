@@ -1,4 +1,4 @@
-/* Plainly — the page. All data work happens in the Python engine (assets/worker.js);
+/* Gist — the page. All data work happens in the Python engine (assets/worker.js);
    this file only draws screens and passes requests. No data is sent anywhere. */
 "use strict";
 
@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-16.2");
+const worker = new Worker("assets/worker.js?v=2026-11-17.1");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -131,7 +131,7 @@ $("exploreBtn").addEventListener("click", () => { S.explore = !S.explore; show(S
 
 // ---------------------------------------------------------------- business words (the second brain's glossary)
 let brainWords = [];
-const localWords = () => { try { return JSON.parse(localStorage.getItem("plainly.words") || "[]"); } catch { return []; } };
+const localWords = () => { try { return JSON.parse(localStorage.getItem("gist.words") || localStorage.getItem("plainly.words") || "[]"); } catch { return []; } };
 function parseBrain(md) {
   const m = md.split(/^##\s+/m).find((s) => /^Business words/i.test(s));
   if (!m) return [];
@@ -154,12 +154,12 @@ function openWords(prefill) {
       renderTable(["When I say", "It means", "Where it is kept"], [
         ...brainWords.map((w) => [w.term, w.means, "Project notes (SECOND_BRAIN.md)"]),
         ...mine.map((w) => [w.term, w.means, "This browser"])], ["text", "text", "text"]),
-      mine.length ? h("button", { class: "link", onclick: () => { localStorage.removeItem("plainly.words"); sendGlossary(); draw(); } }, "Clear the words kept in this browser") : null);
+      mine.length ? h("button", { class: "link", onclick: () => { localStorage.removeItem("gist.words"); localStorage.removeItem("plainly.words"); sendGlossary(); draw(); } }, "Clear the words kept in this browser") : null);
   };
   draw();
   const add = () => {
     if (!term.value.trim() || !means.value.trim()) return;
-    localStorage.setItem("plainly.words", JSON.stringify([...localWords(), { term: term.value.trim(), means: means.value.trim() }]));
+    localStorage.setItem("gist.words", JSON.stringify([...localWords(), { term: term.value.trim(), means: means.value.trim() }]));
     sendGlossary(); term.value = means.value = ""; draw(); toast("Saved. Try your question again.");
   };
   openModal(h("div", { class: "sheet" },
@@ -711,7 +711,7 @@ async function askAboutPrediction(r) {
   wait.replaceChildren(renderAnswer(await call("ask_about_ml", { result: r.id })));
 }
 
-// ---------------------------------------------------------------- The story: choose a subject, then five cards
+// ---------------------------------------------------------------- The story: choose a subject, then the cards
 async function renderPick() {
   const root = $("view-pick");
   if (!S.pick) {
@@ -720,7 +720,7 @@ async function renderPick() {
   }
   const { options, tidy } = S.pick;
   if (S.view !== "pick") return;
-  const choose = (o) => { S.story = { spec: { dataset: o.dataset, value: o.value }, open: "what" }; show("story"); };
+  const choose = (o) => { S.story = newStory(o); show("story"); };
   const tidyBox = tidy.fixes || tidy.links ? h("div", { class: "tidy" },
     h("p", {}, h("strong", {}, "Before you start. "),
       [tidy.fixes ? `I found ${plural(tidy.fixes, "safe fix")} (such as repeated rows)` : null, tidy.links ? `${plural(tidy.links, "pair")} of tables that belong together` : null].filter(Boolean).join(" and ") +
@@ -743,6 +743,10 @@ async function renderPick() {
     tidyBox);
 }
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const yearStart = () => { try { return Number(localStorage.getItem("gist.yearStart")) || 1; } catch { return 1; } };
+const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_start: yearStart() }, open: "what" });
+
 async function renderStory() {
   const root = $("view-story");
   if (!root.children.length) root.replaceChildren(h("p", { class: "muted" }, h("span", { class: "spinner" }), "Putting the story together…"));
@@ -754,8 +758,10 @@ async function renderStory() {
   const spec = S.story.spec;
   const retell = (change) => { Object.assign(spec, change); renderStory(); };
   const options = (S.pick || {}).options || [];
-  const subject = h("select", { "aria-label": "What the story is about", onchange: (e) => { const o = options[Number(e.target.value)]; S.story = { spec: { dataset: o.dataset, value: o.value }, open: "what" }; renderStory(); } },
-    options.map((o, i) => h("option", { value: i, selected: o.dataset === spec.dataset && o.value === spec.value }, o.label)));
+  const listed = options.some((o) => o.dataset === spec.dataset && o.value === st.value);
+  const subject = h("select", { "aria-label": "What the story is about", onchange: (e) => { if (e.target.value === "") return; S.story = newStory(options[Number(e.target.value)]); renderStory(); } },
+    listed ? null : h("option", { value: "", selected: true }, st.label),
+    options.map((o, i) => h("option", { value: i, selected: o.dataset === spec.dataset && o.value === st.value }, o.label)));
   const period = st.periods.length ? h("select", { "aria-label": "Period", onchange: (e) => retell({ period: e.target.value }) },
     st.periods.map((p) => h("option", { value: p.key, selected: p.key === st.period }, p.label))) : null;
   const current = st.filters[0];
@@ -766,10 +772,15 @@ async function renderStory() {
     h("option", { value: "" }, "everything"),
     st.filter_fields.map((f) => h("optgroup", { label: f.field }, f.values.map((v) =>
       h("option", { value: JSON.stringify([f.field, v]), selected: !!current && current.field === f.field && current.value[0] === v }, v))))) : null;
-  const caution = st.cards[4].actions.find((a) => a.link);
-  const cards = st.cards.map((c) => storyCard(c, st, retell));
+  const how = st.cards.find((c) => c.key === "how");
+  const caution = how && how.actions.find((a) => a.link);
+  if (!st.cards.some((c) => c.key === S.story.open)) S.story.open = "what";
+  const cards = st.cards.map((c, i) => storyCard(c, i + 1, st, retell));
+  const yearSel = st.periods.length ? h("label", { class: "yearstart" }, "Business year starts in ",
+    h("select", { onchange: (e) => { try { localStorage.setItem("gist.yearStart", e.target.value); } catch {} retell({ fiscal_start: Number(e.target.value) }); } },
+      MONTHS.map((m, i) => h("option", { value: i + 1, selected: i + 1 === st.fiscal_start }, m)))) : null;
   root.replaceChildren(
-    h("p", { class: "frame controls" }, "The story of ", options.length > 1 ? subject : h("strong", {}, st.label), period ? [" in ", period] : null, filter ? [" for ", filter] : null),
+    h("p", { class: "frame controls" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label), period ? [" in ", period] : null, filter ? [" for ", filter] : null),
     h("div", { class: "print-title" }, h("h1", {}, st.title), h("p", {}, `Prepared ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} from ${st.source}`)),
     caution ? h("p", { class: "caution" }, caution.why + " ", h("button", { class: "link", onclick: () => show("data") }, "Review now")) : null,
     h("div", { class: "scards" }, cards),
@@ -780,38 +791,85 @@ async function renderStory() {
       } }, "Copy summary"),
       h("button", { class: "secondary", onclick: () => window.print() }, "Print briefing"),
       h("span", { class: "grow" }),
+      yearSel,
       h("span", { class: "muted", style: "font-size:13px" }, "Worked out from your files only. Nothing is guessed.")));
   openCard(S.story.open, false);
 }
 
-function openCard(key, scroll) {
+function openCard(key, byHand) {
   S.story.open = key;
+  closeRailMenus();
+  const wrap = document.querySelector(".scards");
+  if (wrap) wrap.classList.toggle("has-open", !!key);
   document.querySelectorAll(".scard").forEach((el) => {
     const on = el.dataset.key === key;
     el.classList.toggle("open", on);
     el.querySelector(".shead").setAttribute("aria-expanded", String(on));
+    el.querySelector(".sclip").inert = !on;
     if (on) {
       const c = S.story.data.cards.find((x) => x.key === key), canvas = el.querySelector("canvas");
-      if (canvas) requestAnimationFrame(() => (c.forecast ? drawForecast(canvas, c.forecast) : drawChart(canvas, { ...c.chart, emphasis: key === "what" ? "last" : null })));
-      if (scroll) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+      if (canvas) requestAnimationFrame(() => (c.forecast ? drawForecast(canvas, c.forecast, true) : drawChart(canvas, { ...c.chart, emphasis: key === "what" ? "last" : null, animate: true })));
+      // once the cards have finished gliding, bring the opened one into view if it ended up off screen
+      if (byHand) setTimeout(() => {
+        const top = el.getBoundingClientRect().top;
+        if (S.story.open === key && (top < 70 || top > window.innerHeight * 0.6)) window.scrollTo({ top: window.scrollY + top - 84, behavior: "smooth" });
+      }, 700);
     }
   });
 }
 
-function storyCard(c, st, retell) {
+// ---- the small round buttons on the edge of an open card: change the number, the grouping or the chart
+const RAIL_ICON = {
+  number: "M6 2.5 4.8 13.5M11.2 2.5 10 13.5M2.5 5.8h11M2 10.2h11",
+  group: "M2.5 4h11M2.5 8h7.5M2.5 12h4",
+  chart: "M3.5 13V8.5M8 13V3M12.5 13V6",
+};
+function closeRailMenus(except) {
+  document.querySelectorAll(".rail-item.on").forEach((el) => {
+    if (el === except) return;
+    el.classList.remove("on");
+    el.querySelector("button").setAttribute("aria-expanded", "false");
+  });
+}
+document.addEventListener("click", (e) => { if (!e.target.closest(".rail-item")) closeRailMenus(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRailMenus(); });
+
+function railButton(icon, label, heading, items, pick) {
+  const btn = h("button", { class: "rail-btn", title: label, "aria-label": label, "aria-haspopup": "true", "aria-expanded": "false" });
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="${RAIL_ICON[icon]}"/></svg>`;
+  const item = h("div", { class: "rail-item" }, btn,
+    h("div", { class: "rail-menu", role: "group", "aria-label": label },
+      h("p", {}, heading),
+      items.map((it) => h("button", { "aria-pressed": String(!!it.on), onclick: () => { closeRailMenus(); if (!it.on) pick(it.key); } }, it.label))));
+  btn.addEventListener("click", () => {
+    const on = !item.classList.contains("on");
+    closeRailMenus(item);
+    item.classList.toggle("on", on);
+    btn.setAttribute("aria-expanded", String(on));
+  });
+  return item;
+}
+
+function storyCard(c, n, st, retell) {
+  const spec = S.story.spec;
+  const rail = [];
+  if (c.key !== "how" && st.measures.length > 1) rail.push(railButton("number", "Change the number", "Number (every card follows)",
+    st.measures.map((m, i) => ({ key: i, label: m.label, on: m.value === st.value })), (i) => retell({ value: st.measures[i].value })));
+  if (c.dims && c.dims.length > 1) rail.push(railButton("group", c.key === "when" ? "Change the date used" : "Change the grouping", c.dim_word || "Grouped by",
+    c.dims.slice(0, 8).map((d) => ({ key: d, label: d, on: d === c.dim })), (d) => retell({ [c.key === "when" ? "date" : c.key]: d })));
+  if (c.chart_types && c.chart_types.length > 1) rail.push(railButton("chart", "Change the chart", "Chart",
+    c.chart_types.map((t) => ({ key: t.key, label: t.label, on: t.key === c.chart_type })), (k) => retell({ charts: { ...(spec.charts || {}), [c.key]: k } })));
   const body = h("div", { class: "sbody" });
+  if (rail.length) body.append(h("div", { class: "rail" }, rail));
   if (c.more.length) body.append(h("p", { class: "more" }, c.more.join(" ")));
-  if (c.actions) {
-    body.append(h("ol", { class: "actions" }, c.actions.map((a) => h("li", {}, h("strong", {}, a.do), h("span", {}, a.why)))), h("p", { class: "fine" }, c.note));
-  }
-  if (c.dims && c.dims.length > 1) body.append(h("div", { class: "pills", role: "group", "aria-label": "Look at it by" }, h("span", {}, "By"),
-    c.dims.slice(0, 6).map((d) => h("button", { "aria-pressed": String(d === c.dim), onclick: () => retell({ [c.key]: d }) }, d))));
-  if (c.chart || c.forecast) body.append(h("div", { class: "chart-box" }, h("canvas", { role: "img", "aria-label": c.sentence })));
-  if (c.table && !c.empty) body.append(renderTable(c.table.columns, c.table.rows, null, { dash: true }));
+  if (c.actions) body.append(h("ol", { class: "actions" }, c.actions.map((a) => h("li", {}, h("strong", {}, a.do), h("span", {}, a.why)))));
+  if (c.note) body.append(h("p", { class: "fine" }, c.note));
+  if (c.chart || c.forecast) body.append(h("div", { class: "chart-box" }, h("canvas", { role: "img", "aria-label": c.forecast ? "Forecast (an estimate)" : c.sentence })));
+  if (c.table) body.append(renderTable(c.table.columns, c.table.rows, null, { dash: true }));
   body.append(h("details", { class: "how" }, h("summary", {}, "How I got this"), h("div", { class: "box" }, h("ol", {}, c.steps.map((s) => h("li", {}, s))),
     c.sql ? h("details", { style: "margin-top:12px" }, h("summary", {}, "Technical detail"), h("p", { class: "muted" }, "The main query that was run on your data, for an analyst who wants to verify it."), h("code", {}, c.sql)) : null)));
   return h("article", { class: "scard", "data-key": c.key },
     h("button", { class: "shead", "aria-expanded": "false", title: c.ask, onclick: () => openCard(S.story.open === c.key ? null : c.key, true) },
-      h("span", { class: "q" }, c.word), h("span", { class: "s" }, c.sentence), h("span", { class: "tog", "aria-hidden": "true" })),
-    body);
+      h("span", { class: "q" }, h("span", { class: "n" }, n), c.word), h("span", { class: "s" }, c.sentence), h("span", { class: "tog", "aria-hidden": "true" })),
+    h("div", { class: "swrap" }, h("div", { class: "sclip" }, body)));
 }

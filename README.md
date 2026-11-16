@@ -1,15 +1,17 @@
-# Plainly
+# Gist
 
 A private analytics briefing for people who are not analysts. Drop in a file, confirm
-what was found, and read the story in five cards.
+what was found, and read the story in up to six cards.
 
 Everything runs inside the browser tab. Uploaded files are never sent anywhere.
 
-## The five-card story
+## The story cards
 
 After a file is dropped and confirmed, you choose what you want to understand, and the
-page shows five cards: **What**, **Who**, **When**, **Which**, **How**. Each opens to a
-sentence, then a chart, then a table. The story can be narrowed with one filter, copied
+page shows up to six cards: **What**, **Who**, **When**, **Which**, **Why**, **How**. A card
+appears only when the data can support it. Each opens to a sentence, then a chart, then a
+table; small buttons on the card's edge change the number, the grouping or the chart, and
+the sentence is rewritten to match. The story can be narrowed with one filter, copied
 as text, or printed as a briefing. The chatbot, table builder, predictions and data check
 are behind **Explore further**.
 
