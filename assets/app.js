@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.2");
+const worker = new Worker("assets/worker.js?v=2026-11-17.3");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -895,6 +895,6 @@ function storyCard(c, n, st, retell) {
     c.sql ? h("details", { style: "margin-top:12px" }, h("summary", {}, "Technical detail"), h("p", { class: "muted" }, "The main query that was run on your data, for an analyst who wants to verify it."), h("code", {}, c.sql)) : null)));
   return h("article", { class: "scard", "data-key": c.key, style: `--i:${n - 1}` },
     h("button", { class: "shead", "aria-expanded": "false", title: c.ask, onclick: () => openCard(S.story.open === c.key ? null : c.key, true) },
-      h("span", { class: "q" }, h("span", { class: "n" }, n), c.word), h("span", { class: "s" }, c.sentence), h("span", { class: "tog", "aria-hidden": "true" })),
+      h("span", { class: "n" }, n), h("span", { class: "t" }, h("span", { class: "q" }, c.word), h("span", { class: "s" }, c.sentence)), h("span", { class: "tog", "aria-hidden": "true" })),
     h("div", { class: "swrap" }, h("div", { class: "sclip" }, body)));
 }

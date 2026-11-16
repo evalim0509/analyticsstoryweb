@@ -155,6 +155,13 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R48. Glass feel: clean white cards on the plain light background; only the
   top bar is frosted glass. (Owner chose this over tinted or strong glass.)
 - R49. The app must work well on a phone (iPhone size) on every screen.
+- R51. In a story card the topic word (What, Who...) is the heading: large, bold,
+  dark. The one-line finding sits under it as the subtitle: smaller and grey,
+  growing a little when the card opens. The two must be easy to tell apart.
+- R52. While a card is hovered or open, pale blue hues drift slowly inside the
+  card's shape (about 15 seconds a pass). They must stay light enough not to
+  disturb reading; charts and tables keep a solid white backing. The subject
+  choice cards do the same on hover.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. Tapping one goes straight to the story.
 
@@ -221,6 +228,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | Story cards: topic word as a bold heading with the finding as a grey subtitle under it; slow drifting blue hues inside hovered and open cards. Printed briefing tidied. |
 | 2026-11-17 | Story and subject choices restyled as outlined white cards with arrival, lift, expand and flow-in motion; slower eased auto-scroll; frosted top bar; phone layout pass; footer note and start-page notes removed; business-year choice moved behind "Explore further". Fixed the data check's side list, whose layout had been disturbed by the card edge buttons sharing its style name. |
 | 2026-11-17 | Renamed to Gist. Added the Why card; cards the data cannot support are hidden; glide animation and numbered cards; edge buttons to change the number, grouping and chart; sentences rewritten in a boardroom voice; forecast labelled as an estimate; reader-chosen business year start; header privacy badge removed; "A look at ...". Targets no longer compared with the wrong number. |
 | 2026-11-16 | Fixed "engine could not start" after an update: the list of engine files now comes from `engine/manifest.json`, fetched fresh every time, and all app files carry a version stamp. Project also copied to the `evalim0509/analyticsstoryweb` repository. |
