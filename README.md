@@ -1,20 +1,20 @@
 # Plainly
 
-A private analytics workspace for people who are not analysts. Drop in a file, confirm
-what was found, then ask questions, build tables and charts, and run predictions.
+A private analytics briefing for people who are not analysts. Drop in a file, confirm
+what was found, and read the story in five cards.
 
 Everything runs inside the browser tab. Uploaded files are never sent anywhere.
 
-## This branch: the five-card story
+## The five-card story
 
-`claude/story-cards` replaces the dashboard with a story. After a file is dropped and
-confirmed, you choose what you want to understand, and the page shows five cards:
-**What**, **Who**, **When**, **Which**, **How**. Each opens to a sentence, then a chart,
-then a table. The story can be narrowed with one filter, copied as text, or printed as a
-briefing. The chatbot, table builder, predictions and data check are behind
-**Explore further**.
+After a file is dropped and confirmed, you choose what you want to understand, and the
+page shows five cards: **What**, **Who**, **When**, **Which**, **How**. Each opens to a
+sentence, then a chart, then a table. The story can be narrowed with one filter, copied
+as text, or printed as a briefing. The chatbot, table builder, predictions and data check
+are behind **Explore further**.
 
-To see this branch live, choose `claude/story-cards` as the branch in the Pages settings below.
+This repository was split out of `evalim0509/analyticschatbotv1` (branch
+`claude/story-cards`), which keeps the original three-tab version.
 
 ## Open the app
 
@@ -22,10 +22,10 @@ Turn on GitHub Pages once (no terminal needed):
 
 1. On GitHub, open this repository, then **Settings**, then **Pages**.
 2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-3. Choose the branch that holds this code and the folder **/ (root)**, then **Save**.
+3. Choose the branch **main** and the folder **/ (root)**, then **Save**.
 
 After a minute the page shows your link, in the form
-`https://<your-username>.github.io/analyticschatbotv1/`. Every later change to that
+`https://evalim0509.github.io/analyticsstoryweb/`. Every later change to that
 branch is published automatically.
 
 On the free GitHub plan, Pages needs the repository to be public. That makes the code

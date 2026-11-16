@@ -25,7 +25,7 @@
 - Answers come only from uploaded files. When words do not match, say so; never guess.
 - Every answer, table and model result carries a plain-English "How I got this".
 - Users never read or write SQL. Plain words everywhere; no analytics jargon in the UI.
-- Story branch: the five cards are the main screen. Each card is sentence first, then
+- The five cards are the main screen. Each card is sentence first, then
   chart, then table. Keep whitespace generous; do not add panels, tiles or extra controls
   to the story page. Ask, builder, predictions and data check live behind "Explore further".
 

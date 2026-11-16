@@ -75,11 +75,11 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   to the table and chart; "Ask about this" connects to machine learning results.
 
 ### Project
-- R16. Code lives in the connected GitHub repository.
+- R16. Code lives in the connected GitHub repository (`evalim0509/analyticsstoryweb`, branch `main`).
 - R17. This file acts as the second brain and is updated continuously.
 - R18. Dummy data is included to test all three tabs.
 
-### Story-first redesign (branch `claude/story-cards`, 2026-11-16)
+### Story-first redesign (2026-11-16; this repository's main product)
 - R19. Redefine the BI dashboard: no charts and tables at first glance. The main
   screen is five cards: What, Who, When, Which, How.
 - R20. Each card expands into data in a fixed order: sentence first, then chart,
@@ -144,7 +144,6 @@ that matter, who uses the output.
   always start fresh? Currently always fresh.
 - Largest file size the business expects? The browser engine is comfortable up
   to roughly a few hundred thousand rows.
-- Story branch: should it replace the original version (merge), or stay a separate variant?
 - Does the business use calendar quarters, or a fiscal year that starts in another month?
 - Are there fixed business definitions (fiscal year start, currency, what counts
   as an active customer) that the chatbot should apply automatically?
