@@ -359,6 +359,10 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   nothing when the key differs or the number is unchanged.
 - R107. Matched fields remember their table, so two tables with an "Amount"
   column never collide; with several tables the table name is shown on each pill.
+- R108. "Try with sample data" includes a file with amounts in more than one
+  currency (`overseas_sales.csv`) and an accounting export with Debit and Credit
+  columns (Sage nominal activity), so the currency stop and the credit/debit sign
+  choice can be seen with one tap.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -388,6 +392,7 @@ that matter, who uses the output.
 | 2026-11-15 | The chatbot refuses rather than guesses when words do not match the files. | Accuracy. |
 | 2026-11-15 | SQL is hidden behind a "Technical detail" disclosure inside "How I got this". | Users never need SQL, but an analyst can still verify an answer. |
 | 2026-11-15 | Charts follow one consistent style; no dual axes; at most 8 colours. | Readability for non-analysts. |
+| 2026-11-19 | The extra sample files are added to the one sample button rather than a second sample choice. | Owner asked to add them into the sample data; one big button per step. The main sample story still opens on Sales Amount. |
 
 | 2026-11-16 | Story branch: the first screen after import asks "What do you want to understand?" and offers up to five subjects. | Owner's choice (R25). |
 | 2026-11-16 | Story branch: default period is the latest complete quarter; the latest month and the latest 12 months are one click away. Incomplete final months are left out. | Quarters suit management reporting; partial months mislead. |
@@ -438,6 +443,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-19 | Sample data now includes a mixed-currency file and a Sage export with Debit and Credit, so the currency stop and the sign choice show up with "Try with sample data". |
 | 2026-11-19 | Fixes A1–A8: report cleanup only for recognised exports (no lost sales or shifted rows); reconciliation starts from the file as read; mixed currencies blocked; debit/credit sign choice; margin over rows with cost only, with coverage; day/month order shown and changeable; since-last keyed on the whole story; table-aware field matches. New: combined date from two columns. |
 | 2026-11-18 | Story cards: coloured ▲/▼ chips in sentences, big headline figure, bold bullets with arrows, highlighted charts with values on bars, short tables with arrows and share bars. |
 | 2026-11-18 | Quick checks merged into Match your fields (four steps); matching redesigned as two plain columns with pills and tags, Continue at top and bottom; one-line page for returning users; catalogues keep added-up/averaged; reconciliation line moved to the bottom of the story. |

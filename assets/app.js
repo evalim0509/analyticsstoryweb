@@ -60,7 +60,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-19.1");
+const worker = new Worker("assets/worker.js?v=2026-11-19.2");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -195,10 +195,10 @@ $("addBtn").addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => { if (fileInput.files.length) readFiles([...fileInput.files]); fileInput.value = ""; });
 $("sampleBtn").addEventListener("click", async (e) => {
   e.stopPropagation();
-  const names = ["sales_orders.xlsx", "customers.csv", "products.xlsx", "q3_business_review.docx", "strategy_update.pptx"];
+  const names = ["sales_orders.xlsx", "customers.csv", "products.xlsx", "overseas_sales.csv", "accounting/sage_nominal_activity.csv", "q3_business_review.docx", "strategy_update.pptx"];
   busy("Fetching the sample files…");
   try {
-    const files = await Promise.all(names.map(async (n) => ({ name: n, buffer: await (await fetch("sample-data/" + n)).arrayBuffer() })));
+    const files = await Promise.all(names.map(async (n) => ({ name: n.split("/").pop(), buffer: await (await fetch("sample-data/" + n)).arrayBuffer() })));
     readFiles(files);
   } catch (err) { closeModal(); toast("Could not load the sample files."); }
 });

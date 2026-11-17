@@ -127,3 +127,16 @@ slide("Hiring plan", ["Six new account managers, two in each of North, West and 
       "Hiring budget approved by Helena Brandt, Chief Financial Officer"])
 p.save(OUT / "strategy_update.pptx")
 print("orders", len(rows), "customers", len(customers))
+
+# ---------------- overseas sales: amounts in more than one currency (shows the mixed-currency stop)
+R2 = random.Random(11)
+overseas = []
+for m in range(1, 10):
+    for k in range(8):
+        country, code, scale = R2.choice([("Malaysia", "RM", 4.4), ("Singapore", "SGD", 1.3), ("Indonesia", "USD", 1), ("Thailand", "USD", 1)])
+        day = dt.date(2025, m, 28 if k == 7 else R2.randint(1, 27)) + dt.timedelta(days=2 if (m == 9 and k == 7) else 0)
+        overseas.append([day.isoformat(), country, f"{R2.choice(first)} {R2.choice(second)}", f"{code} {round(R2.uniform(300, 2500) * scale):,}"])
+with open(OUT / "overseas_sales.csv", "w", newline="", encoding="utf-8") as f:
+    w = csv.writer(f)
+    w.writerow(["Invoice Date", "Country", "Customer", "Amount"])
+    w.writerows(sorted(overseas))
