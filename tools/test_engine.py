@@ -51,6 +51,7 @@ K = {c["key"]: c for c in s6["cards"]}
 assert list(K) == ["what", "who", "when", "which", "why", "how"] and all(c["sentence"] for c in s6["cards"])
 assert s6["period"] == "quarter" and "target" in " ".join(K["what"]["more"]) and K["how"]["actions"]
 assert "led by" in K["why"]["sentence"] and abs(sum(r[3] for r in K["why"]["table"]["rows"]) - (K["what"]["table"]["rows"][0][1] - K["what"]["table"]["rows"][1][1])) < 0.01
+assert K["what"]["mood"] == "bad" and K["why"]["mood"] == "bad" and K["when"]["mood"] in ("good", "bad") and K["who"]["mood"] == K["how"]["mood"] == "neutral", {k: c["mood"] for k, c in K.items()}
 assert any(a.get("estimate") for a in K["how"]["actions"]) and {m["value"] for m in s6["measures"]} >= {"Sales Amount", "Quantity", None}
 n = call("story_build", spec={"dataset": o["options"][0]["dataset"], "value": None, "period": "month", "filters": [{"field": "Region", "op": "is", "value": ["North"]}]})
 assert "Region" not in next(c for c in n["cards"] if c["key"] == "which")["dims"] and "North" in n["title"]

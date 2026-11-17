@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.5");
+const worker = new Worker("assets/worker.js?v=2026-11-17.6");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -63,7 +63,7 @@ worker.onmessage = (e) => {
     const el = $("engineStatus");
     if (m.status === "ready") {
       engineReady = true;
-      el.textContent = "Ready. Everything runs inside this browser tab."; el.className = "engine ready";
+      el.textContent = ""; el.className = "engine ready";
       sendGlossary();
     } else if (m.status === "failed") {
       const stale = /ImportError|Could not load engine|cannot import/.test(m.error);
@@ -207,13 +207,15 @@ window.addEventListener("drop", (e) => {
 
 // ---- the three steps after files are added: 1 what I found, 2 tidy, 3 what to understand
 const orbEl = (size) => h("span", { class: "orb " + (size || ""), "aria-hidden": "true" },
-  h("span", { class: "core" }, ["haze", "mn", "cy", "pk", "vi", "bl", "lit"].map((c) => h("i", { class: c })), h("b", { class: "arc" })));
+  h("span", { class: "core" }, ["haze", "mn", "cy", "pk", "vi", "bl", "lit"].map((c) => h("i", { class: c }))));
 document.querySelectorAll("[data-orb]").forEach((el) => el.replaceWith(orbEl(el.dataset.orb)));
 const aura = () => h("span", { class: "aura", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("b"), h("b"));
 // The progress bar: each part is a button that takes you back (or forward) to that step once your data is in.
 const STEP_NAMES = ["Your files", "Tidy", "Choose what to understand"];
 function stepper(n) {
+  const back = n === 1 ? leaveFlow : () => goStep(n - 1);
   return h("nav", { class: "stepper", "aria-label": "Steps" },
+    h("button", { class: "back small-back", title: n === 1 ? "Back" : `Back to step ${n - 1}`, onclick: back }, h("span", { "aria-hidden": "true" }, "←"), " Back"),
     h("span", {}, `Step ${n} of 3`),
     h("span", { class: "bars" }, [1, 2, 3].map((i) => h("button", {
       class: (i <= n ? "on" : "") + (i === n ? " cur" : ""), title: STEP_NAMES[i - 1], "aria-label": `Step ${i}: ${STEP_NAMES[i - 1]}`,
@@ -244,21 +246,37 @@ function flowPage(step, ...kids) {
 }
 function leaveFlow() { S.flow = false; S.pending = false; show(S.state ? (S.story ? "story" : "pick") : "welcome"); }
 
-function busy(text) {
-  flowPage(null, h("div", { class: "flow-wait" }, orbEl("mid"), h("p", { class: "flow-text" }, text),
-    engineReady ? null : h("p", { class: "muted" }, "The first visit takes a little longer while the engine downloads.")));
+const MIN_WAIT = 3000;
+const atLeast = (ms, work) => Promise.all([work, new Promise((r) => setTimeout(r, ms))]).then(([v]) => v);
+let busyTimer = null;
+function waitScreen(lines) {
+  lines = [].concat(lines);
+  const text = h("p", { class: "flow-text", "aria-live": "polite" }, lines[0]);
+  clearInterval(busyTimer);
+  let i = 0;
+  if (lines.length > 1) busyTimer = setInterval(() => {
+    if (!text.isConnected || i >= lines.length - 1) return clearInterval(busyTimer);
+    text.classList.add("swap");
+    setTimeout(() => { text.textContent = lines[++i]; text.classList.remove("swap"); }, 380);
+  }, Math.max(900, MIN_WAIT / lines.length));
+  return h("div", { class: "flow-wait" }, orbEl("mid"), text,
+    engineReady ? null : h("p", { class: "muted" }, "The first visit takes a little longer while the engine downloads."));
 }
+function busy(lines) { flowPage(null, waitScreen(lines)); }
 
 async function readFiles(files) {
   S.flow = true;
-  busy(`Reading ${files.length === 1 ? files[0].name : "your " + files.length + " files"}…`);
-  const previews = [];
-  for (const f of files) {
-    try {
-      const buffer = f.buffer || (await f.arrayBuffer());
-      previews.push(await call("preview", { name: f.name }, buffer));
-    } catch (err) { previews.push({ file: f.name, error: "I couldn't read this file. (" + err.message + ")" }); }
-  }
+  busy([`Reading ${files.length === 1 ? files[0].name : "your " + files.length + " files"}…`, "Looking through every row…", "Working out what each column holds…"]);
+  const previews = await atLeast(MIN_WAIT, (async () => {
+    const out = [];
+    for (const f of files) {
+      try {
+        const buffer = f.buffer || (await f.arrayBuffer());
+        out.push(await call("preview", { name: f.name }, buffer));
+      } catch (err) { out.push({ file: f.name, error: "I couldn't read this file. (" + err.message + ")" }); }
+    }
+    return out;
+  })());
   showPreview(previews);
 }
 
@@ -342,8 +360,8 @@ async function stepTidy(review) {
     return;
   }
   const fix = h("button", { class: "primary big", onclick: async () => {
-    fix.disabled = true; fix.textContent = "Fixing…";
-    const r = await call("story_tidy");
+    busy(["Tidying your data…", "Applying the safe fixes…", "Checking the result…"]);
+    const r = await atLeast(MIN_WAIT, call("story_tidy"));
     S.checks = {}; setState(r.state); S.pick = { options: r.options, tidy: r.tidy };
     toast(`${plural(r.done.length, "fix", "fixes")} applied.`);
     show("pick");
@@ -378,7 +396,8 @@ async function renderData() {
     const t = o.tidy, n = t.fixes + t.links;
     const fixAll = async (e) => {
       e.target.disabled = true; e.target.textContent = "Fixing…";
-      const r = await call("story_tidy");
+      fixBox.replaceChildren(waitScreen(["Tidying your data…", "Applying the safe fixes…", "Checking the result…"]));
+      const r = await atLeast(MIN_WAIT, call("story_tidy"));
       S.checks = {}; setState(r.state); S.pick = { options: r.options, tidy: r.tidy };
       if (S.story) { const same = r.options.find((x) => x.value === S.story.spec.value); if (same) S.story.spec.dataset = same.dataset; }
       toast(r.done.length ? `${plural(r.done.length, "fix", "fixes")} applied.` : "Nothing to fix automatically.");
@@ -818,9 +837,9 @@ async function renderPick() {
   const wrap = h("div", { class: "scards arrive" });
   wrap.append(...options.map((o, i) => {
     const key = "s" + i, ds = datasetById(o.dataset);
-    return cardShell(key, i + 1, o.label, o.detail, o.label, () => toggleCards(wrap, wrap.dataset.open === key ? null : key, true),
-      h("div", { class: "sbody" }, h("p", { class: "more" }, `${ds ? "Built from " + plural(ds.rows, "row") + ". " : ""}The cards will tell you what happened, who and what is behind it, when, why it changed and how to respond.`),
-        h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => choose(o) }, "See the story"))));
+    const card = cardShell(key, i + 1, o.label, o.detail + (ds ? `, ${plural(ds.rows, "row")}` : ""), "See the story of " + o.label, () => choose(o), h("div", { class: "sbody" }));
+    card.classList.add("go-card");
+    return card;
   }));
   root.replaceChildren(h("div", { class: "flow arrive" },
     stepper(3),
@@ -831,13 +850,15 @@ async function renderPick() {
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const yearStart = () => { try { return Number(localStorage.getItem("gist.yearStart")) || 1; } catch { return 1; } };
-const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_start: yearStart() }, open: null });
+const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_start: yearStart() }, open: null, fresh: true });
 
 async function renderStory() {
   const root = $("view-story");
-  if (!root.children.length) root.replaceChildren(h("p", { class: "muted" }, h("span", { class: "spinner" }), "Putting the story together…"));
+  const fresh = S.story.fresh || !root.children.length;
+  if (fresh) { root.replaceChildren(waitScreen(["Reading the numbers…", "Finding what changed…", "Preparing your story…"])); S.story.arrived = false; }
+  S.story.fresh = false;
   let st;
-  try { st = await call("story_build", { spec: S.story.spec }); } catch (err) { st = { error: "Something went wrong: " + err.message }; }
+  try { st = await atLeast(fresh ? MIN_WAIT : 0, call("story_build", { spec: S.story.spec })); } catch (err) { st = { error: "Something went wrong: " + err.message }; }
   if (S.view !== "story") return;
   if (st.error) { root.replaceChildren(h("p", { class: "frame" }, st.error), h("button", { class: "secondary", onclick: () => show("pick") }, "Choose something else")); return; }
   S.story.data = st;
@@ -894,6 +915,7 @@ function cardShell(key, n, word, sentence, title, onToggle, body) {
 }
 function toggleCards(wrap, key, byHand) {
   if (!wrap) return null;
+  const plan = byHand && key ? scrollPlan(wrap, key) : null;     // measured before anything moves
   wrap.dataset.open = key || "";
   wrap.classList.toggle("has-open", !!key);
   let opened = null;
@@ -904,8 +926,48 @@ function toggleCards(wrap, key, byHand) {
     el.querySelector(".sclip").inert = !on;
     if (on) opened = el;
   });
-  if (opened && byHand) followCard(opened);
+  if (plan) glideTo(plan);
   return opened;
+}
+// Where the opened card's heading will sit once every card has finished moving: measured on an invisible
+// copy of the cards in their final state, so the scroll can be planned once and never corrected mid-way.
+function scrollPlan(wrap, key) {
+  const ghost = wrap.cloneNode(true);
+  ghost.classList.remove("arrive");
+  ghost.classList.add("ghost", "has-open");
+  ghost.style.width = wrap.getBoundingClientRect().width + "px";
+  ghost.querySelectorAll(":scope > .scard").forEach((el) => el.classList.toggle("open", el.dataset.key === key));
+  wrap.after(ghost);                                             // same place in the page, so the same styles apply
+  const realW = wrap.querySelector(":scope > .scard").getBoundingClientRect().width;
+  const ghostW = ghost.querySelector(":scope > .scard").getBoundingClientRect().width;
+  if (Math.abs(realW - ghostW) > 0.5) ghost.style.width = parseFloat(ghost.style.width) + realW - ghostW + "px";   // cards exactly as wide as the real ones
+  const card = ghost.querySelector(`:scope > .scard[data-key="${key}"]`);
+  const offset = card.getBoundingClientRect().top - ghost.getBoundingClientRect().top;
+  ghost.remove();
+  const nowTop = wrap.getBoundingClientRect().top + offset;      // where the heading will be on screen if the page does not scroll
+  const hi = 84, lo = Math.max(hi + 40, window.innerHeight * 0.42);
+  if (nowTop >= hi && nowTop <= lo) return null;                  // already comfortable: no scroll at all
+  const target = nowTop < hi ? hi : Math.max(hi + 10, window.innerHeight * 0.16);
+  return { by: nowTop - target };
+}
+let followStop = null;
+function glideTo(plan) {
+  if (followStop) followStop();
+  const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const y0 = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight + Math.max(0, plan.by);
+  const y1 = Math.max(0, Math.min(y0 + plan.by, max)), D = calm ? 0 : 1200, start = performance.now();
+  let live = true;
+  const stop = () => { live = false; ["wheel", "touchstart", "keydown"].forEach((t) => window.removeEventListener(t, stop)); };
+  followStop = stop;
+  ["wheel", "touchstart", "keydown"].forEach((t) => window.addEventListener(t, stop, { passive: true }));
+  const ease = (t) => -(Math.cos(Math.PI * t) - 1) / 2;
+  const step = (now) => {
+    if (!live) return;
+    const t = D ? Math.min(1, (now - start) / D) : 1;
+    window.scrollTo(0, y0 + (y1 - y0) * ease(t));
+    if (t < 1) requestAnimationFrame(step); else stop();
+  };
+  requestAnimationFrame(step);
 }
 
 function openCard(key, byHand) {
@@ -919,35 +981,6 @@ function openCard(key, byHand) {
     if (!el.classList.contains("open")) return;
     c.forecast ? drawForecast(canvas, c.forecast, true, true) : drawChart(canvas, { ...c.chart, emphasis: key === "what" ? "last" : null, animate: true, clear: true });
   }, byHand ? 420 : 60);
-}
-
-// While a card opens, keep its heading steady on screen, and if it sits low, carry it up to the top
-// along one long eased curve. The page is corrected every frame, so cards closing above never cause
-// a jump. Stops as soon as the reader scrolls themselves.
-let followStop = null;
-function followCard(el) {
-  if (followStop) followStop();
-  const head = el.querySelector(".shead");
-  const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const from = head.getBoundingClientRect().top, hi = 84, lo = Math.max(hi + 40, window.innerHeight * 0.42);
-  const to = from < hi ? hi : from > lo ? Math.max(hi + 10, window.innerHeight * 0.16) : from;
-  const D = calm ? 0 : 1600, start = performance.now();
-  let live = true, y = window.scrollY;
-  const stop = () => { live = false; ["wheel", "touchstart", "keydown"].forEach((t) => window.removeEventListener(t, stop)); };
-  followStop = stop;
-  ["wheel", "touchstart", "keydown"].forEach((t) => window.addEventListener(t, stop, { passive: true }));
-  const ease = (t) => -(Math.cos(Math.PI * t) - 1) / 2;          // gentle start, gentle finish
-  const step = (now) => {
-    if (!live || !el.classList.contains("open") || !el.isConnected) return stop();
-    const t = D ? Math.min(1, (now - start) / D) : 1;
-    const want = from + (to - from) * ease(t);
-    y += head.getBoundingClientRect().top - want;                  // keep a fractional position, so no rounding judder
-    window.scrollTo(0, y);
-    y = Math.abs(window.scrollY - y) > 2 ? window.scrollY : y;     // the page could not scroll that far
-    if (now - start > D + 300) return stop();
-    requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
 }
 
 // ---- the small round buttons on the edge of an open card: change the number, the grouping or the chart
@@ -1000,7 +1033,9 @@ function storyCard(c, n, st, retell) {
   if (c.table) body.append(renderTable(c.table.columns, c.table.rows, null, { dash: true }));
   body.append(h("details", { class: "how" }, h("summary", {}, "How I got this"), h("div", { class: "box" }, h("ol", {}, c.steps.map((s) => h("li", {}, s))),
     c.sql ? h("details", { style: "margin-top:12px" }, h("summary", {}, "Technical detail"), h("p", { class: "muted" }, "The main query that was run on your data, for an analyst who wants to verify it."), h("code", {}, c.sql)) : null)));
-  return cardShell(c.key, n, c.word, c.sentence, c.ask, () => openCard(S.story.open === c.key ? null : c.key, true), body);
+  const card = cardShell(c.key, n, c.word, c.sentence, c.ask, () => openCard(S.story.open === c.key ? null : c.key, true), body);
+  card.dataset.mood = c.mood || "neutral";
+  return card;
 }
 
 // ---------------------------------------------------------------- The first page: the cards, empty until data is added
@@ -1014,7 +1049,7 @@ const PREVIEW = [
 ];
 (function renderPreview() {
   const wrap = $("previewCards");
-  wrap.replaceChildren(...PREVIEW.map(([key, word, ask, about], i) => cardShell(key, i + 1, word, ask, ask,
+  wrap.replaceChildren(...PREVIEW.map(([key, word, ask, about], i) => cardShell(key, i + 1, word + "?", ask, ask,
     () => toggleCards(wrap, wrap.dataset.open === key ? null : key, true),
     h("div", { class: "sbody" }, h("p", { class: "more" }, about + " Add your data to see it."),
       h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => fileInput.click() }, "Add your data"))))));

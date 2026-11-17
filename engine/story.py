@@ -44,6 +44,13 @@ def _move(cur, old, neutral=False):
     return f"{abs(p):.0f}% {up if p > 0 else down}"
 
 
+def _mood(change, lower_better, flat=1.0):
+    """'good', 'bad' or 'neutral' for a change in percent. For cost-like numbers a rise is bad."""
+    if change is None or abs(change) < flat:
+        return "neutral"
+    return "good" if (change > 0) != lower_better else "bad"
+
+
 def _signed(v):
     return ("+" if v >= 0 else "−") + short(abs(v))
 
@@ -365,7 +372,7 @@ def build(spec):
         steps.append("Did the same for " + " and ".join(x for x in (prev_label, yoy_label) if x) + ", and compared.")
     if tinfo:
         steps.append(f"Compared {tinfo['year']} so far with the {tinfo['word']} in “{tinfo['source']}”.")
-    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "more": more,
+    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "more": more, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
                   "chart": {"type": "bar", "labels": [p[0] for p in chart_pts], "series": [{"name": label, "data": [p[1] for p in chart_pts]}], "x_title": "", "y_title": label, "time": True} if len(chart_pts) > 1 else None,
                   "table": {"columns": ["Period", label, "Change to now (%)"], "rows": [[r[0], r[1], None if r[2] is None else round(r[2], 1)] for r in table]},
                   "steps": steps, "sql": run.sql.get("what")})
@@ -446,7 +453,7 @@ def build(spec):
         TIME = [("line", "Line"), ("bars", "Bars")]
         kind = _chart_choice(spec, "when", TIME)
         trows = [[_mlabel(m), v, (round(_pct(v, series[i - 12][1]), 1) if i >= 12 and series[i - 12][1] else None)] for i, (m, v) in enumerate(series)]
-        cards.append({"key": "when", "word": "When", "ask": "When did it happen?", "sentence": s, "more": more,
+        cards.append({"key": "when", "word": "When", "ask": "When did it happen?", "sentence": s, "more": more, "mood": _mood(yearly, lower_better, 3),
                       "dims": dates, "dim": date, "dim_word": "Date used",
                       "chart_types": [{"key": k, "label": l} for k, l in TIME], "chart_type": kind,
                       "chart": {"type": "line" if kind == "line" else "bar", "labels": [_mlabel(m) for m, _ in series], "series": [{"name": label, "data": [v for _, v in series]}], "x_title": "", "y_title": label, "time": True},
@@ -504,6 +511,7 @@ def build(spec):
             else:
                 chart = {"type": "hbar", "labels": [r["name"] for r in big], "series": [{"name": prev_label, "data": [r["before"] for r in big]}, {"name": plabel, "data": [r["now"] for r in big]}], "x_title": dim, "y_title": label}
             why_card = {"key": "why", "word": "Why", "ask": "Why did it change?", "sentence": s, "more": more, "dims": list(per), "dim": dim,
+                        "mood": _mood(_pct(now, pv), lower_better, 0.5),
                         "chart_types": [{"key": k, "label": l} for k, l in WHY], "chart_type": kind, "chart": chart,
                         "table": {"columns": [dim, prev_label, plabel, "Change", "Share of the change (%)"],
                                   "rows": [[r["name"], r["before"], r["now"], r["diff"], round(100.0 * r["diff"] / delta, 1) if sign else None] for r in P["rows"][:200]]},
@@ -580,6 +588,8 @@ def build(spec):
             lines.append(f"{c['word'].upper()}: {c['sentence']} {' '.join(c['more'])}".strip())
     files = ", ".join(dict.fromkeys(d["source"] for d in store.DATASETS.values() if d["kind"] == "table"))
     lines += ["", f"Source: {files}. Worked out from the uploaded files only."]
+    for c in cards:
+        c.setdefault("mood", "neutral")      # Who, Which and How describe; they do not judge
     by_key = {c["key"]: c for c in cards}
     return {"title": title, "label": label, "period": period_kind, "periods": periods, "period_label": plabel, "scope": scope,
             "filter_fields": filter_fields, "filters": filters, "cards": cards, "summary": "\n".join(lines), "source": files,
