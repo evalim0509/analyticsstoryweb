@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.7");
+const worker = new Worker("assets/worker.js?v=2026-11-17.8");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
