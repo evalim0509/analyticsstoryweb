@@ -213,9 +213,9 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R67. The orb has no white line (crescent) around it.
 - R68. The first page no longer shows "Ready. Everything runs inside this
   browser tab."
-- R69. The empty cards on the first page have the same moving waves as story
-  cards, but in the middle of the card instead of the right edge. Their titles
-  are questions: What?, Who?, When?, Which?, Why?, How?
+- R69. The first page has slow blue waves and ripples across the whole page
+  background, centred, not on the cards (the empty cards stay plain white).
+  The empty cards' titles are questions: What?, Who?, When?, Which?, Why?, How?
 - R70. The automatic scroll when a card opens must not shake. It is planned once
   (where the card will end up after all cards finish moving) and done as one
   smooth movement.
@@ -227,7 +227,7 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R73. Reading files and tidying take at least about 3 seconds on screen, with
   the orb and changing lines, so the work feels thorough. Real work is never cut
   short.
-- R74. Card mood: the open card's waves turn soft red for bad news, soft green
+- R74. Card mood (very light, so it never distracts): the open card's waves turn soft red for bad news, soft green
   for good news, and stay blue when neutral. Fixed rules, flipped for cost-like
   numbers: What follows the change on the previous period (under 1% neutral);
   When follows the long-term trend (within 3% a year neutral); Why follows the
@@ -302,6 +302,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | First-page waves moved from the cards to the page background; red and green card moods made lighter and quieter. |
 | 2026-11-17 | Orb crescent removed; "Ready" line removed; centred waves and question titles on first-page cards; shake-free planned scroll; Back buttons on steps; one tap on step 3 with an orb "preparing" screen; 3-second reading and tidying screens; red/green/blue card moods. |
 | 2026-11-17 | Clickable step bar with look-back steps; Back button on the story; step 3 as story cards; all story cards closed at first; gentler auto-scroll; even two-line headline on phones; centred "A look at" line; orb re-animated from the owner's keyframes. |
 | 2026-11-17 | First page is now the empty story cards under the Gist orb; adding files is three big-button steps with details folded; Your data has one "Fix all" and no text list; slower, steadier card opening; colour waves on the right edge of cards; orb logo. |

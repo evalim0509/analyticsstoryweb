@@ -686,19 +686,30 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .go-card:hover .shead .tog { transform: translateX(4px) rotate(-45deg); }
 .go-card .swrap { display: none; }
 
-/* ================= First page: the waves sit in the middle of each empty card */
-#previewCards .aura { -webkit-mask-image: radial-gradient(ellipse 46% 130% at 50% 50%, #000 0, rgba(0,0,0,.8) 35%, transparent 100%); mask-image: radial-gradient(ellipse 46% 130% at 50% 50%, #000 0, rgba(0,0,0,.8) 35%, transparent 100%); }
-#previewCards .aura i { right: auto; left: 28%; }
-#previewCards .aura i:nth-child(2) { left: 36%; } #previewCards .aura i:nth-child(3) { left: 22%; }
-#previewCards .aura b { right: auto; left: 50%; margin: -120px 0 0 -120px; }
+/* ================= First page: no waves on the cards; instead slow waves and ripples across the page background */
+#previewCards .aura { display: none; }
+.page-aura { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.page-aura i { position: absolute; left: 50%; top: 52%; width: 70vmax; height: 70vmax; margin: -35vmax 0 0 -35vmax; border-radius: 42% 58% 55% 45% / 48% 42% 58% 52%; filter: blur(70px); }
+.page-aura i:nth-child(1) { background: rgba(47, 91, 255, .10); animation: page-wave-a 22s ease-in-out infinite alternate; }
+.page-aura i:nth-child(2) { background: rgba(96, 226, 232, .12); width: 52vmax; height: 52vmax; margin: -26vmax 0 0 -26vmax; animation: page-wave-b 27s ease-in-out infinite alternate; }
+.page-aura i:nth-child(3) { background: rgba(214, 112, 246, .08); width: 46vmax; height: 46vmax; margin: -23vmax 0 0 -23vmax; animation: page-wave-c 19s ease-in-out infinite alternate; }
+.page-aura b { position: absolute; left: 50%; top: 40%; width: 60vmin; height: 60vmin; margin: -30vmin 0 0 -30vmin; border-radius: 50%; border: 1.5px solid rgba(80, 140, 255, .14);
+  box-shadow: 0 0 40px rgba(96, 226, 232, .10) inset; opacity: 0; animation: page-ripple 12s cubic-bezier(.2, .6, .3, 1) infinite; }
+.page-aura b + b { animation-delay: 6s; border-color: rgba(150, 120, 255, .12); }
+@keyframes page-wave-a { 0% { transform: translate(-6%, -4%) rotate(0deg) scale(1); } 50% { transform: translate(5%, 6%) rotate(40deg) scale(1.08); } 100% { transform: translate(-3%, 8%) rotate(90deg) scale(.95); } }
+@keyframes page-wave-b { 0% { transform: translate(8%, -6%) rotate(0deg); } 50% { transform: translate(-6%, 4%) rotate(-50deg) scale(1.12); } 100% { transform: translate(4%, 10%) rotate(-100deg) scale(.92); } }
+@keyframes page-wave-c { 0% { transform: translate(-10%, 8%) rotate(0deg); } 50% { transform: translate(8%, -6%) rotate(60deg) scale(1.15); } 100% { transform: translate(-4%, -10%) rotate(120deg); } }
+@keyframes page-ripple { 0% { transform: scale(.3); opacity: 0; } 15% { opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .page-aura * { animation: none !important; } .page-aura b { display: none; } }
+@media print { .page-aura { display: none; } }
 
 /* ================= Mood: the open card's waves turn soft red for bad news, soft green for good, blue when neutral */
 .aura i, .aura b { transition: background-color 1.2s ease, border-color 1.2s ease; }
-.scard[data-mood="bad"] .aura i:nth-child(1) { background: rgba(232, 72, 72, .20); }
-.scard[data-mood="bad"] .aura i:nth-child(2) { background: rgba(255, 146, 122, .22); }
-.scard[data-mood="bad"] .aura i:nth-child(3) { background: rgba(220, 90, 150, .14); }
-.scard[data-mood="bad"] .aura b { border-color: rgba(232, 90, 90, .24); }
-.scard[data-mood="good"] .aura i:nth-child(1) { background: rgba(34, 176, 104, .20); }
-.scard[data-mood="good"] .aura i:nth-child(2) { background: rgba(120, 222, 170, .24); }
-.scard[data-mood="good"] .aura i:nth-child(3) { background: rgba(60, 190, 200, .14); }
-.scard[data-mood="good"] .aura b { border-color: rgba(40, 170, 110, .24); }
+.scard[data-mood="bad"] .aura i:nth-child(1) { background: rgba(240, 110, 110, .10); }
+.scard[data-mood="bad"] .aura i:nth-child(2) { background: rgba(255, 175, 155, .12); }
+.scard[data-mood="bad"] .aura i:nth-child(3) { background: rgba(232, 140, 175, .07); }
+.scard[data-mood="bad"] .aura b { border-color: rgba(236, 120, 120, .14); }
+.scard[data-mood="good"] .aura i:nth-child(1) { background: rgba(70, 190, 130, .10); }
+.scard[data-mood="good"] .aura i:nth-child(2) { background: rgba(150, 226, 186, .12); }
+.scard[data-mood="good"] .aura i:nth-child(3) { background: rgba(110, 204, 208, .07); }
+.scard[data-mood="good"] .aura b { border-color: rgba(80, 186, 130, .14); }
