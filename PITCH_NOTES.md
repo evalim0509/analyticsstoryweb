@@ -7,7 +7,7 @@ is broken today, who else is in the market, and how to answer prospects.
 what we know about Gist (a fix, a new weakness, a competitor, a decision) updates
 it in the same change. See "How this file is maintained" at the end.
 
-Last updated: 2026-11-17, against `main` at commit 511d4a4.
+Last updated: 2026-11-18, against `main` at commit 511d4a4.
 
 > **This repository is public.** Anyone can read this file, including the weaknesses
 > below. Make the repository private, or move this file out of it, before sharing
@@ -138,6 +138,8 @@ repo or a deliberate licence); a written accuracy policy; a validation plan with
 | No consolidation, budgets or 3-way forecasting | "Gist writes the briefing; it isn't a planning tool." | Stay focused; don't compete with Fathom/Syft on planning. |
 | No accounts, licensing or payment yet | "Concept stage; pilot pricing on request." | Decide hosted vs desktop first. |
 | No licence file; code is public | Don't bring it up; fix it before pitching. | Make the repo private, add a licence. |
+| The name "Gist" is also GitHub's product (gist.github.com) | Expect confusion in searches and with technical buyers; matching domains are scarce. | Run a MyIPO trademark search and check domains before printing anything with the name. |
+| Hosted on github.io from a public repo | "It's a pilot address." | Move to Cloudflare Pages from a private repo on your own domain; optionally put an email login in front for pilots. |
 | General-ledger stories are unreliable today | Don't demo a GL file. | See bug B4. |
 
 ---
@@ -349,6 +351,8 @@ Not yet; it works from the export you already run.
 - [ ] A "decision support, not financial advice" disclaimer in the footer and the exports.
 - [ ] Rehearse the demo with the prospect's own file.
 - [ ] Re-check section 6 (competitors) in the week of the pitch.
+- [ ] Settle the name (trademark search; "Gist" clashes with GitHub Gist) and buy the domain.
+- [ ] Deploy from a private repo to Cloudflare Pages on that domain, with the security policy sent as real HTTP headers.
 
 ---
 

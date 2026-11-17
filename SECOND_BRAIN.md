@@ -447,6 +447,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-18 | `PITCH_NOTES.md`: added the GitHub Gist name clash and github.io hosting as weaknesses, plus name, domain and deployment items on the pre-pitch checklist. No app changes. |
 | 2026-11-17 | `PITCH_NOTES.md` expanded: key points from the three reviews, market landscape (Fathom, Syft, Reach, Power BI, Tableau Pulse, Zoho Zia, Julius, Arria, Datasette Lite, Evidence, RATH, LIDA), data-prep methodology comparison (OpenRefine, Easy Data Transform, KNIME, Data Wrangler, Exploratory, Datablist); rule to keep it updated (R109, CLAUDE.md). |
 | 2026-11-17 | Added `PITCH_NOTES.md`: strengths, weaknesses, known bugs B1–B5, competitor comparison, objection answers, demo script, claims to avoid and a pre-pitch checklist. No app changes. |
 | 2026-11-19 | Sample data now includes a mixed-currency file and a Sage export with Debit and Credit, so the currency stop and the sign choice show up with "Try with sample data". |
