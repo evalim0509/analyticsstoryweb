@@ -5,6 +5,7 @@ A card is left out completely when the data cannot support it (no dates: no When
 import re
 import numpy as np
 from . import store, builder, quality, joins, ml
+from . import measures as MS
 from .store import q, rows, scalar, fmt
 
 MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -15,7 +16,7 @@ TARGET = re.compile(r"target|budget|plan|goal|quota", re.I)
 LOWER_IS_BETTER = re.compile(r"cost|expense|spend|overhead|complaint|return|refund|ticket", re.I)
 
 
-def short(v):
+def _short(v):
     """Numbers the way people say them: 1.52M, 188K, 742."""
     if v is None:
         return "nothing"
@@ -33,14 +34,20 @@ def _pct(cur, old):
     return None if not old else 100.0 * (cur - old) / abs(old)
 
 
-def _move(cur, old, neutral=False):
-    """'8% ahead of' / '3% behind' / 'level with'. Cost-like numbers get the neutral 'above' / 'below'."""
+def _move(cur, old, neutral=False, unit=""):
+    """'8% ahead of' / '3% behind' / 'level with'. Cost-like numbers get the neutral 'above' / 'below'.
+    A measure that is itself a percentage moves in points."""
+    up, down = ("above", "below") if neutral else ("ahead of", "behind")
+    if unit == "%":
+        if old is None:
+            return None
+        d = cur - old
+        return "level with" if abs(d) < 0.05 else f"{abs(d):.1f} points {up if d > 0 else down}"
     p = _pct(cur, old)
     if p is None:
         return None
     if abs(p) < 0.5:
         return "level with"
-    up, down = ("above", "below") if neutral else ("ahead of", "behind")
     return f"{abs(p):.0f}% {up if p > 0 else down}"
 
 
@@ -52,7 +59,7 @@ def _mood(change, lower_better, flat=1.0):
 
 
 def _signed(v):
-    return ("+" if v >= 0 else "−") + short(abs(v))
+    return ("+" if v >= 0 else "−") + _short(abs(v))
 
 
 def _join(parts):
@@ -70,19 +77,19 @@ def _lookup_tables():
 
 
 def options():
-    """Up to five things a story can be about, in plain words."""
+    """The things a story can be about, in plain words: main totals, derived measures, an average, the row count."""
     lookups = _lookup_tables()
     facts = [d for d in store.DATASETS.values() if d["kind"] == "table" and d["id"] not in lookups]
     facts.sort(key=lambda d: (not any(c["type"] == "date" for c in d["columns"]), -d["rows"]))
     out = []
     for base in facts:
         view = next((d for d in store.DATASETS.values() if d["kind"] == "linked" and d["base"] == base["id"]), base)
-        measures = [c["name"] for c in base["columns"] if c["role"] == "measure" and not NOT_ADDITIVE.search(c["name"])]
-        measures.sort(key=lambda n: next((i for i, w in enumerate(LEAD) if w in n.lower()), 99))
-        for m in measures[:2 if len(facts) > 1 else 3]:
-            out.append({"dataset": view["id"], "value": m, "label": m, "detail": f"Total {m}, from {base['name']}"})
-        out.append({"dataset": view["id"], "value": None, "label": f"Number of {base['name']}", "detail": f"How many rows there are in {base['name']}"})
-    return out[:5]
+        items = MS.listing(view, base)
+        group = lambda i: "count" if not i["value"] else "calc" if str(i["value"]).startswith("calc:") else "average" if i["label"] == f"Average {i['value']}" else "total"
+        pick = [i for i in items if group(i) == "total"][:2 if len(facts) > 1 else 3] + [i for i in items if group(i) == "calc"][:3] \
+            + [i for i in items if group(i) == "average"][:1] + [i for i in items if group(i) == "count"]
+        out += [{"dataset": view["id"], "value": i["value"], "label": i["label"], "detail": i["detail"]} for i in pick]
+    return out[:8]
 
 
 def tidy_status():
@@ -138,9 +145,14 @@ class _Run:
             self.sql.setdefault(card, builder.pretty_sql(sql, p))
         return scalar(sql, p) or 0
 
-    def by(self, dim, a=None, b=None, card=None):
+    def count(self, a=None, b=None):
         w, p = self._cond(a, b)
-        sql = f"SELECT {q(dim)}, {self.expr} FROM {self.t}{w} GROUP BY 1 ORDER BY 2 DESC"
+        return scalar(f"SELECT COUNT(*) FROM {self.t}{w}", p) or 0
+
+    def by(self, dim, a=None, b=None, card=None, min_n=0):
+        w, p = self._cond(a, b)
+        having = f" HAVING COUNT(*) >= {int(min_n)}" if min_n else ""
+        sql = f"SELECT {q(dim)}, {self.expr} FROM {self.t}{w} GROUP BY 1{having} ORDER BY 2 DESC"
         if card:
             self.sql.setdefault(card, builder.pretty_sql(sql, p))
         return [(("not recorded" if k is None else str(k)), v or 0) for k, v in rows(sql, p)]
@@ -177,9 +189,9 @@ def _dims(ds, base):
     return [c["name"] for c in who], [c["name"] for c in which]
 
 
-def _breakdown(run, dim, cur, prev, card):
-    now = run.by(dim, cur[0], cur[1], card) if cur else run.by(dim, card=card)
-    before = dict(run.by(dim, prev[0], prev[1])) if prev else {}
+def _breakdown(run, dim, cur, prev, card, min_n=0):
+    now = run.by(dim, cur[0], cur[1], card, min_n) if cur else run.by(dim, card=card, min_n=min_n)
+    before = dict(run.by(dim, prev[0], prev[1], min_n=min_n)) if prev else {}
     total = sum(v for _, v in now) or 1
     out = []
     for name, v in now:
@@ -211,13 +223,6 @@ def _find_target(ds, base):
     return None
 
 
-def measures(base):
-    """The numbers a story about this table can add up, plus the row count."""
-    ms = [c["name"] for c in base["columns"] if c["role"] == "measure" and not NOT_ADDITIVE.search(c["name"])]
-    ms.sort(key=lambda n: next((i for i, w in enumerate(LEAD) if w in n.lower()), 99))
-    return [{"value": m, "label": m} for m in ms[:8]] + [{"value": None, "label": f"Number of {base['name']}"}]
-
-
 def _chart_choice(spec, key, kinds):
     want = (spec.get("charts") or {}).get(key)
     return want if want in [k for k, _ in kinds] else kinds[0][0]
@@ -227,15 +232,17 @@ def build(spec):
     ds = store.DATASETS[spec["dataset"]]
     base = store.DATASETS[ds.get("base", ds["id"])]
     value = spec.get("value")
-    label = value or f"Number of {base['name']}"
-    of_what = value or base["name"]
-    expr = f"SUM({q(value)})" if value else "COUNT(*)"
+    M = MS.define(ds, base, value)
+    label, of_what, expr, unit = M["label"], M["of"], M["expr"], M["unit"]
     filters = [f for f in (spec.get("filters") or []) if f.get("value")]
     where, params, fwords = builder.where_clause(ds, filters)
     dates = [c["name"] for c in base["columns"] if c["type"] == "date"]
-    date = spec.get("date") if spec.get("date") in dates else (dates[0] if dates else None)
+    date = spec.get("date") if spec.get("date") in dates else MS.chosen_date(base)
     run = _Run(ds, expr, where, params, date)
-    lower_better = bool(LOWER_IS_BETTER.search(label))
+    lower_better = bool(LOWER_IS_BETTER.search(label)) and M["kind"] != "ratio"
+
+    def short(v):                       # figures the way people say them; percentages with one decimal
+        return "nothing" if v is None else f"{v:.1f}%" if unit == "%" else _short(v)
     scope = f" (only where {' and '.join(fwords)})" if fwords else ""
     start = f"Started with “{ds['name']}” ({ds['rows']:,} rows)" + (f", keeping only rows where {' and '.join(fwords)}." if fwords else ".")
     who_dims, which_dims = _dims(ds, base)
@@ -278,8 +285,9 @@ def build(spec):
             if stray:
                 notes.append(f"Ignored {stray} row{'s' if stray != 1 else ''} with dates far away from all the others.")
             first, last = main[0][0], main[-1][0]
-            if main[-1][2] < 22 and last - first > 3:
-                notes.append(f"Left out {_mlabel(last)} because the month is not complete yet.")
+            done, why = MS.month_complete(base, date, last, main[-1][2])
+            if not done and last - first > 3:
+                notes.append(f"Left out {_mlabel(last)}. {why}")
                 last -= 1
             got = {r[0]: r[1] or 0 for r in main}
             series = [(m, got.get(m, 0)) for m in range(first, last + 1)]
@@ -317,16 +325,17 @@ def build(spec):
     table, chart_pts, more = [[plabel, now, None]], [], []
     bits = []
     if prev:
-        mv = _move(now, pv, lower_better)
+        mv = _move(now, pv, lower_better, unit)
         if mv:
             bits.append(f"{mv} {prev_label}")
         table.append([prev_label, pv, _pct(now, pv)])
         chart_pts.append((prev_label, pv))
         if pv and now != pv:
-            more.append(f"That is {short(abs(now - pv))} {'more' if now >= pv else 'less'} than {prev_label}, which closed at {short(pv)}.")
+            more.append((f"That is {abs(now - pv):.1f} points {'higher' if now >= pv else 'lower'}" if unit == "%" else f"That is {short(abs(now - pv))} {'more' if now >= pv else 'less'}")
+                        + f" than {prev_label}, which closed at {short(pv)}.")
     if yoy:
         yv = run.total(*yoy)
-        mv = _move(now, yv, lower_better)
+        mv = _move(now, yv, lower_better, unit)
         if mv:
             bits.append(f"{mv} {yoy_label}")
         table.append([yoy_label, yv, _pct(now, yv)])
@@ -334,16 +343,16 @@ def build(spec):
     if cur:
         s = f"{label} {'came to' if pv and now < pv else 'reached'} {short(now)} in {plabel}" + (", " + " and ".join(bits) if bits else "") + "."
     else:
-        s = f"{label} totalled {short(now)} across all the data."
+        s = f"{label} {'totalled' if M['additive'] else 'came to'} {short(now)} across all the data."
     chart_pts.append((plabel, now))
-    target = _find_target(ds, base) if value and date and series else None
+    target = _find_target(ds, base) if M["column"] and M["additive"] and date and series else None
     if target:
         # A target only applies to the number it was set for: "Sales Target" is not compared with Quantity.
         # A target with no subject in its name ("Target 2025") is read as the main number's target.
         words = lambda t: {w for w in re.findall(r"[a-z]+", t.lower()) if len(w) > 2 and not TARGET.fullmatch(w)} - {"amount", "total", "value", "year", "annual"}
         about = words(target["col"]) or words(target["table"]["name"])
         mine = words(value)
-        if not ((about & mine) if about and mine else value == measures(base)[0]["value"]):
+        if not ((about & mine) if about and mine else value == MS.listing(ds, base)[0]["value"]):
             target = None
     tinfo = None
     if target and all(f["field"] == target["dim"] for f in filters):
@@ -367,12 +376,12 @@ def build(spec):
                          "dim": target["dim"], "source": target["table"]["name"], "left": left}
                 state = "ahead of" if tinfo["reached"] > pace + 3 else "behind" if tinfo["reached"] < pace - 3 else "in line with"
                 more.append(f"For {ylabel} to date, {label} stands at {short(ta)} against a {word} of {short(tt)}: {tinfo['reached']:.0f}% delivered with {pace:.0f}% of the year elapsed, {state} the pace required.")
-    steps = [start] + notes + [f"Added up {label} for {plabel}." if value else f"Counted the rows for {plabel}."]
+    steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"{M['verb']} for {plabel}."]
     if prev or yoy:
         steps.append("Did the same for " + " and ".join(x for x in (prev_label, yoy_label) if x) + ", and compared.")
     if tinfo:
         steps.append(f"Compared {tinfo['year']} so far with the {tinfo['word']} in “{tinfo['source']}”.")
-    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "more": more, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
+    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "more": more, "brief": {"text": f"{short(now)} in {plabel}"}, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
                   "chart": {"type": "bar", "labels": [p[0] for p in chart_pts], "series": [{"name": label, "data": [p[1] for p in chart_pts]}], "x_title": "", "y_title": label, "time": True} if len(chart_pts) > 1 else None,
                   "table": {"columns": ["Period", label, "Change to now (%)"], "rows": [[r[0], r[1], None if r[2] is None else round(r[2], 1)] for r in table]},
                   "steps": steps, "sql": run.sql.get("what")})
@@ -385,12 +394,14 @@ def build(spec):
         if not dims:
             return None
         dim = chosen if chosen in dims else dims[0]
-        items, total, gone = _breakdown(run, dim, cur, prev, key)
+        items, total, gone = _breakdown(run, dim, cur, prev, key, 0 if M["additive"] else 3)
         if not items:
             return None
         named = [i for i in items if i["name"] != "not recorded"] or items
         top = named[0]
         more = []
+        if not M["additive"]:
+            return ratio_card(key, word, ask, dims, dim, items, named)
         if len(items) == 1:
             s = f"{top['name']} was the only {dim} recorded, at {short(top['value'])}."
         else:
@@ -417,7 +428,7 @@ def build(spec):
         data = [i["value"] for i in shown] + ([rest] if rest else [])
         cols = [dim, label, "Share (%)"] + ([f"Change on {prev_label} (%)"] if prev else [])
         trows = [[i["name"], i["value"], round(i["share"], 1)] + ([None if i["change"] is None else round(i["change"], 1)] if prev else []) for i in items[:200]]
-        steps = [start] + notes + [f"Grouped the rows for {plabel} by {dim} and {'added up ' + label if value else 'counted them'}.",
+        steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"Grouped the rows for {plabel} by {dim} and {'counted them' if not value else ('added up ' + label if M['column'] else 'worked out ' + label)}.",
                                    "Worked out each group's share of the total."]
         if prev:
             steps.append(f"Did the same for {prev_label} to see who rose and fell. Small groups (under 3% of the total) are not named as risers or fallers.")
@@ -425,6 +436,29 @@ def build(spec):
                 "chart_types": [{"key": k, "label": l} for k, l in SHARE] if len(items) > 1 else [], "chart_type": kind,
                 "chart": {"type": "share" if kind == "share" else "hbar", "labels": labels, "series": [{"name": label, "data": data}], "x_title": dim, "y_title": label} if len(items) > 1 else None,
                 "table": {"columns": cols, "rows": trows}, "steps": steps, "sql": run.sql.get(key)}
+
+    def ratio_card(key, word, ask, dims, dim, items, named):
+        """Who / Which for an average or a ratio: highest and lowest groups; shares of a total do not apply."""
+        top, low = named[0], named[-1]
+        s = f"{top['name']} had the highest {label} of any {dim}, at {short(top['value'])}." if len(named) > 1 else f"{top['name']} was the only {dim} recorded, at {short(top['value'])}."
+        more = [f"{low['name']} was the lowest, at {short(low['value'])}."] if len(named) > 1 else []
+        moved = [i for i in named if i["change"] is not None and i["before"]]
+        if prev and len(moved) > 1:
+            up = max(moved, key=lambda i: i["value"] - i["before"]); down = min(moved, key=lambda i: i["value"] - i["before"])
+            parts = ([f"{up['name']} rose the most (from {short(up['before'])} to {short(up['value'])})"] if up["value"] > up["before"] else []) + \
+                    ([f"{down['name']} fell the most (from {short(down['before'])} to {short(down['value'])})"] if down["value"] < down["before"] else [])
+            if parts:
+                more.append(f"Against {prev_label}, " + " while ".join(parts) + ".")
+        shown = items[:8]
+        cols = [dim, label] + ([f"Change on {prev_label} ({'points' if unit == '%' else '%'})"] if prev else [])
+        chg = lambda i: None if i["before"] is None else round(i["value"] - i["before"], 1) if unit == "%" else (None if i["change"] is None else round(i["change"], 1))
+        trows = [[i["name"], round(i["value"], 2)] + ([chg(i)] if prev else []) for i in items[:200]]
+        steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"Grouped the rows for {plabel} by {dim} and worked out {label} for each group.",
+                 "Left out groups with fewer than 3 rows, because an average of one or two rows says little."]
+        return {"key": key, "word": word, "ask": ask, "sentence": s, "more": more, "dims": dims, "dim": dim, "chart_types": [], "chart_type": "bars",
+                "chart": {"type": "hbar", "labels": [i["name"] for i in shown], "series": [{"name": label, "data": [i["value"] for i in shown]}], "x_title": dim, "y_title": label} if len(items) > 1 else None,
+                "table": {"columns": cols, "rows": trows}, "steps": steps, "sql": run.sql.get(key),
+                "brief": {"text": s}}
 
     who_card = dim_card("who", "Who", "Who is behind it?", who_dims, spec.get("who"))
     if who_card:
@@ -447,7 +481,7 @@ def build(spec):
         hi, lo = int(np.argmax(y)), int(np.argmin(y))
         more.append(f"The strongest month on record was {_mlabel(series[hi][0])}, at {short(float(y[hi]))}; the weakest was {_mlabel(series[lo][0])}, at {short(float(y[lo]))}.")
         if n > 12:
-            mv = _move(float(y[-1]), float(y[-13]), lower_better)
+            mv = _move(float(y[-1]), float(y[-13]), lower_better, unit)
             if mv:
                 more.append(f"The latest month, {_mlabel(series[-1][0])}, closed at {short(float(y[-1]))}, {mv} the same month a year earlier.")
         TIME = [("line", "Line"), ("bars", "Bars")]
@@ -468,7 +502,7 @@ def build(spec):
     # ---------------- WHY: which groups the change came from (left out with no earlier period or no grouping)
     why_card = None
     why_dims = (who_dims + which_dims)[:8]
-    if prev and why_dims:
+    if prev and why_dims and M["additive"]:
         delta = now - pv
         flat = pv is not None and (delta == 0 or (pv and abs(delta) / abs(pv) < 0.005))
         sign = 0 if flat else (1 if delta > 0 else -1)
@@ -491,7 +525,8 @@ def build(spec):
             dim = spec.get("why") if spec.get("why") in per else best
             run.by(dim, cur[0], cur[1], "why")
             P = per[dim]
-            tag = lambda r: f"{r['name']} ({_signed(r['diff'])})"
+            plain = lambda n: f"{dim} {n}" if str(n).strip().lower() in ("yes", "no", "true", "false", "y", "n", "0", "1", "not recorded") else n
+            tag = lambda r: f"{plain(r['name'])} ({_signed(r['diff'])})"
             lead = P["same"][:1] + [r for r in P["same"][1:2] if abs(r["diff"]) >= 0.25 * abs(P["same"][0]["diff"])]
             opp = P["against"][0] if P["against"] else None
             if sign:
@@ -547,7 +582,7 @@ def build(spec):
         dim, i = max(worry, key=lambda w: abs(w[1]["value"] - w[1]["before"]))
         actions.append({"do": f"Find out why {i['name']} {'rose' if lower_better else 'dropped'}.",
                         "why": f"{dim} {i['name']} went from {short(i['before'])} in {prev_label} to {short(i['value'])} in {plabel} ({'up' if i['change'] > 0 else 'down'} {abs(i['change']):.0f}%). It is the largest {'rise' if lower_better else 'fall'} in the period."})
-    for m in moves:
+    for m in (moves if M["additive"] else []):
         if m["count"] >= 4 and m["top"]["share"] >= 40 and m["top"]["name"] != "not recorded":
             actions.append({"do": f"Reduce the reliance on {m['top']['name']}.",
                             "why": f"{m['top']['name']} alone makes up {m['top']['share']:.0f}% of {label} across {m['count']:,} {m['dim']} groups. A problem there would hit the whole result."})
@@ -558,13 +593,13 @@ def build(spec):
                         "why": f"{dim} {i['name']} went from {short(i['before'])} to {short(i['value'])} (up {abs(i['change']):.0f}%), the largest gain in the period."})
     actions = actions[:4]
     fc = None
-    if series and len(series) >= 6:
-        fc = ml.forecast({"dataset": ds["id"], "date": date, "value": value, "agg": "sum", "horizon": 3, "filters": filters})
+    if series and len(series) >= 6 and (M["column"] or not value):
+        fc = ml.forecast({"dataset": ds["id"], "date": date, "value": M["column"], "agg": "avg" if M["kind"] == "rate" else "sum", "horizon": 3, "filters": filters})
         if "error" in fc:
             fc = None
         else:
-            tot, lo, hi = (sum(f[k] for f in fc["forecast"]) for k in ("value", "lo", "hi"))
-            actions.append({"do": f"Estimate: about {short(tot)} over the next 3 months.", "estimate": True,
+            tot, lo, hi = (sum(f[k] for f in fc["forecast"]) / (3 if M["kind"] == "rate" else 1) for k in ("value", "lo", "hi"))
+            actions.append({"do": f"Estimate: about {short(tot)} {'a month on average' if M['kind'] == 'rate' else 'over the next 3 months'}.", "estimate": True,
                             "why": f"This is a forecast, not a fact. It is based on {len(fc['history'])} months of history; roughly {short(lo)} to {short(hi)} is likely. Reliability is {fc['reliability']['label'].lower()} ({fc['reliability']['score']} out of 100): {fc['reliability']['text'].split('. ', 1)[-1]}"})
     if not actions:
         actions.append({"do": "Nothing stands out that needs a decision right now.", "why": "No group moved sharply, nothing is far off target, and the data has no open issues."})
@@ -590,10 +625,14 @@ def build(spec):
     lines += ["", f"Source: {files}. Worked out from the uploaded files only."]
     for c in cards:
         c.setdefault("mood", "neutral")      # Who, Which and How describe; they do not judge
+        c.setdefault("brief", {"text": c["sentence"]})
+    rec = MS.reconcile(ds, base, M, where, params, fwords, cur, plabel, now, date, run.count(*cur) if cur else run.count())
+    lines.insert(1, rec["line"])
     by_key = {c["key"]: c for c in cards}
     return {"title": title, "label": label, "period": period_kind, "periods": periods, "period_label": plabel, "scope": scope,
             "filter_fields": filter_fields, "filters": filters, "cards": cards, "summary": "\n".join(lines), "source": files,
-            "measures": measures(base), "value": value, "fiscal_start": fs0 + 1,
+            "measures": [{"value": m["value"], "label": m["label"]} for m in MS.listing(ds, base)], "value": value, "fiscal_start": fs0 + 1,
+            "reconcile": rec, "measure": {"kind": M["kind"], "unit": unit, "formula": M["formula"], "additive": M["additive"]},
             "spec": {"dataset": ds["id"], "value": value, "period": period_kind, "filters": filters, "date": date, "fiscal_start": fs0 + 1,
                      "charts": {k: c["chart_type"] for k, c in by_key.items() if c.get("chart_type")},
                      **{k: by_key[k]["dim"] for k in ("who", "which", "why") if k in by_key}}}

@@ -1,0 +1,31 @@
+Doc No,Doc Date,Code,Company Name,Agent,Area,Description,Amount,Local Amount
+IV-5001,03/01/2025,300-0001,Harbour Cafe,----,KL,Sales,193.74,193.74
+IV-5002,04/01/2025,300-0005,Tidewater Books,----,KL,Sales,"2,937.45","2,937.45"
+CN-5003,07/01/2025,300-0002,Nimbus Clinics,----,KL,Credit note,"(2,813.73)","(2,813.73)"
+IV-5004,08/01/2025,300-0004,Summit Optics,----,KL,Sales,"2,021.05","2,021.05"
+IV-5005,16/01/2025,300-0004,Summit Optics,----,KL,Sales,"2,915.39","2,915.39"
+IV-5006,18/01/2025,300-0002,Nimbus Clinics,----,KL,Sales,"2,949.96","2,949.96"
+IV-5007,22/01/2025,300-0002,Nimbus Clinics,----,KL,Sales,"1,303.39","1,303.39"
+CN-5008,24/01/2025,300-0001,Harbour Cafe,----,KL,Credit note,"(2,535.42)","(2,535.42)"
+CN-5009,25/01/2025,300-0003,Orchid Florist,----,KL,Credit note,"(1,377.61)","(1,377.61)"
+IV-5010,27/01/2025,300-0004,Summit Optics,----,KL,Sales,"2,631.03","2,631.03"
+IV-5011,28/01/2025,300-0003,Orchid Florist,----,KL,Sales,"1,856.52","1,856.52"
+IV-5012,01/02/2025,300-0001,Harbour Cafe,----,KL,Sales,"1,459.44","1,459.44"
+IV-5013,03/02/2025,300-0004,Summit Optics,----,KL,Sales,160.32,160.32
+IV-5014,04/02/2025,300-0003,Orchid Florist,----,KL,Sales,"2,921.98","2,921.98"
+IV-5015,05/02/2025,300-0002,Nimbus Clinics,----,KL,Sales,248.17,248.17
+CN-5016,05/02/2025,300-0002,Nimbus Clinics,----,KL,Credit note,"(1,166.26)","(1,166.26)"
+IV-5017,08/02/2025,300-0004,Summit Optics,----,KL,Sales,389.09,389.09
+IV-5018,10/02/2025,300-0002,Nimbus Clinics,----,KL,Sales,857.31,857.31
+CN-5019,10/02/2025,300-0001,Harbour Cafe,----,KL,Credit note,(902.88),(902.88)
+IV-5020,14/02/2025,300-0004,Summit Optics,----,KL,Sales,"1,822.38","1,822.38"
+IV-5021,15/02/2025,300-0003,Orchid Florist,----,KL,Sales,"1,017.10","1,017.10"
+IV-5022,24/02/2025,300-0005,Tidewater Books,----,KL,Sales,"2,879.27","2,879.27"
+IV-5023,28/02/2025,300-0002,Nimbus Clinics,----,KL,Sales,"2,024.00","2,024.00"
+IV-5024,07/03/2025,300-0005,Tidewater Books,----,KL,Sales,"1,260.12","1,260.12"
+IV-5025,10/03/2025,300-0004,Summit Optics,----,KL,Sales,575.97,575.97
+IV-5026,10/03/2025,300-0002,Nimbus Clinics,----,KL,Sales,274.80,274.80
+IV-5027,13/03/2025,300-0005,Tidewater Books,----,KL,Sales,"1,937.90","1,937.90"
+IV-5028,22/03/2025,300-0005,Tidewater Books,----,KL,Sales,547.03,547.03
+IV-5029,23/03/2025,300-0005,Tidewater Books,----,KL,Sales,"1,770.17","1,770.17"
+IV-5030,29/03/2025,300-0001,Harbour Cafe,----,KL,Sales,"2,505.27","2,505.27"

@@ -2,6 +2,7 @@
 The page sends a function name and JSON; it gets JSON back."""
 import json, math, traceback
 from . import store, ingest, quality, joins, builder, chat, ml, story
+from . import measures
 
 
 def state():
@@ -125,6 +126,34 @@ def story_tidy():
 
 def story_build(spec):
     return story.build(spec)
+
+
+def story_checks():
+    """Gist's guesses for the quick-checks step."""
+    return {"tables": measures.checks()}
+
+
+def story_set_checks(answers):
+    measures.set_checks(answers)
+    return {"tables": measures.checks(), "options": story.options()}
+
+
+def measure_list(dataset):
+    ds = store.DATASETS[dataset]
+    base = store.DATASETS[ds.get("base", ds["id"])]
+    return {"suggested": measures.suggested(ds), "mine": [m for m in measures.derived(ds) if m.get("user")],
+            "numbers": [c["name"] for c in ds["columns"] if c["type"] == "number"],
+            "ids": [c["name"] for c in ds["columns"] if c["role"] == "id"], "base": base["name"]}
+
+
+def measure_add(dataset, name, a, op, b=None):
+    r = measures.add(dataset, name, a, op, b)
+    return {"added": r, "options": story.options()}
+
+
+def measure_remove(value):
+    measures.remove(value)
+    return {"options": story.options()}
 
 
 def set_glossary(entries):

@@ -65,4 +65,66 @@ p = call("preview", name="plain.csv", data=b"Ref,Amount\n" + b"".join(f"R{i},{i 
 plain = call("confirm", token=p["token"])["datasets"][-1]
 assert [c["key"] for c in call("story_build", spec={"dataset": plain["id"], "value": "Amount"})["cards"]] == ["what", "how"]
 call("restore", dataset=ID["Orders"]); assert call("state")["datasets"][0]["rows"] == 1783
+
+# --- quick checks, averages, derived measures, reconciliation
+chk = call("story_checks")["tables"][0]
+kinds = {m["name"]: m["kind"] for m in chk["measures"]}
+assert kinds["Unit Price"] == "rate" and kinds["Sales Amount"] == "money" and chk["date"] == "Order Date" and chk["complete"] is True, chk
+labels = [x["label"] for x in call("story_options")["options"]]
+assert {"Margin", "Margin %", "Average order value", "Average Unit Price"} <= set(labels), labels
+ds0 = call("story_options")["options"][0]["dataset"]
+mp = call("story_build", spec={"dataset": ds0, "value": "calc:margin_pct"})
+assert "points" in mp["cards"][0]["sentence"] and "%" in mp["cards"][0]["sentence"] and "why" not in [c["key"] for c in mp["cards"]]
+assert any("Margin %" in st for st in mp["cards"][0]["steps"])            # the formula is shown in How I got this
+av = call("story_build", spec={"dataset": ds0, "value": "Unit Price"})
+assert av["label"] == "Average Unit Price" and "highest" in av["cards"][1]["sentence"] and "Share (%)" not in av["cards"][1]["table"]["columns"]
+sa = call("story_build", spec={"dataset": ds0, "value": "Sales Amount"})
+assert "matching the file" in sa["reconcile"]["line"] or "removed rows" in sa["reconcile"]["line"], sa["reconcile"]
+assert sa["reconcile"]["steps"][0][1] == 1783
+# the owner's answers win: say Sales Amount is a rate, then change it back
+call("story_set_checks", answers=[{"dataset": chk["dataset"], "kinds": {"Sales Amount": "rate"}}])
+assert call("story_build", spec={"dataset": ds0, "value": "Sales Amount"})["label"] == "Average Sales Amount"
+call("story_set_checks", answers=[{"dataset": chk["dataset"], "kinds": {"Sales Amount": "money"}, "complete": False}])
+lm = call("story_build", spec={"dataset": ds0, "value": "Sales Amount", "period": "month"})
+assert lm["period_label"] == "Aug 2025" and any("still running" in n for n in lm["cards"][0]["steps"]), lm["period_label"]
+call("story_set_checks", answers=[{"dataset": chk["dataset"], "complete": True}])
+# a measure the owner makes
+mine = call("measure_add", dataset=ds0, name="Sales per unit", a="Sales Amount", op="divide", b="Quantity")
+assert mine["added"]["label"] in [x["label"] for x in call("measure_list", dataset=ds0)["mine"]]
+assert call("story_build", spec={"dataset": ds0, "value": mine["added"]["value"]})["label"] == "Sales per unit"
+
+# monthly data dated on the 1st keeps its latest month; identical rows without an ID are only flagged
+csv = "Month,Region,Revenue\n" + "".join(f"2024-{m:02d}-01,{r},{100 + m * 10 + i}\n" for m in range(1, 13) for i, r in enumerate(["North", "South"]))
+csv += "2024-12-01,North,220\n"           # an exact repeat, no ID column
+p = call("preview", name="monthly.csv", data=csv.encode()); mon = call("confirm", token=p["token"])["datasets"][-1]
+mo = call("story_build", spec={"dataset": mon["id"], "value": "Revenue", "period": "month"})
+assert mo["period_label"] == "Dec 2024", mo["period_label"]
+dup = next(i for i in call("check", dataset=mon["id"])["issues"] if i["kind"] == "duplicates")
+assert dup["confidence"] == "Medium", dup
+
+# --- accounting export templates (dummy files in each system's standard layout)
+ACC = ROOT / "sample-data" / "accounting"
+want = {"xero_invoices.csv": ("Xero", 40), "quickbooks_sales_by_customer.xlsx": ("QuickBooks", 24), "autocount_sales_listing.xlsx": ("AutoCount", 30),
+        "sqlaccount_sales.csv": ("SQL Account", 30), "sap_b1_ar_invoices.xlsx": ("SAP Business One", 25),
+        "sage_nominal_activity.csv": ("Sage", 16), "myob_general_ledger.csv": ("MYOB", 14)}
+for f, (tpl, n) in want.items():
+    t = call("preview", name=f, data=(ACC / f).read_bytes())["tables"][0]
+    assert t["template"] == tpl and t["rows"] == n, (f, t["template"], t["rows"])
+qb = call("preview", name="qb.xlsx", data=(ACC / "quickbooks_sales_by_customer.xlsx").read_bytes())["tables"][0]
+names = [c["name"] for c in qb["columns"]]
+assert names[0] == "Customer" and "Accrual" not in str(qb["sample"]) and all(r[0] for r in qb["sample"]), qb["sample"][:2]
+amt = names.index("Amount")
+import openpyxl
+qb_total = next(r[8] for r in openpyxl.load_workbook(ACC / "quickbooks_sales_by_customer.xlsx").active.iter_rows(values_only=True) if r[0] == "TOTAL")
+qb_total = _n = float(str(qb_total).replace(",", "").replace("(", "-").replace(")", ""))
+qb_ds = call("confirm", token=call("preview", name="qb.xlsx", data=(ACC / "quickbooks_sales_by_customer.xlsx").read_bytes())["token"])["datasets"][-1]
+from engine import store as _st
+qb_sum, qb_min = _st.rows(f'SELECT TOTAL("Amount"), MIN("Amount") FROM "{_st.DATASETS[qb_ds["id"]]["table"]}"')[0]
+assert abs(qb_sum - qb_total) < 0.01 and qb_min < 0, (qb_sum, qb_total, qb_min)        # totals match the report; credit memos are negative
+sage = call("preview", name="sage.csv", data=(ACC / "sage_nominal_activity.csv").read_bytes())["tables"][0]
+assert "Net amount" in [c["name"] for c in sage["columns"]] and "Recognised an export from Sage" in sage["notes"][0]["text"]
+ac = call("preview", name="ac.xlsx", data=(ACC / "autocount_sales_listing.xlsx").read_bytes())["tables"][0]
+assert next(c for c in ac["columns"] if c["name"] == "Total")["type"] == "number"          # "RM 1,234.00" read as a number
+from engine import store as _st
+assert _st.parse_number("(1,234.50)") == -1234.5 and _st.parse_number("1,234.00 Cr") == -1234 and _st.parse_number("RM 2,000") == 2000 and _st.parse_number("$1,500.25") == 1500.25
 print("All engine checks passed.")

@@ -2,7 +2,7 @@
 Excel, CSV, Word, PowerPoint, PDF, text and JSON are supported."""
 import csv, io, json, re, zipfile
 import xml.etree.ElementTree as ET
-from . import store
+from . import store, accounting
 
 PENDING = {}   # token -> parsed file waiting for the user to confirm
 
@@ -41,6 +41,7 @@ def _table_from_grid(grid):
 
 
 def _candidate(name, where, grid):
+    grid, report = accounting.tidy(grid)
     t = _table_from_grid(grid)
     if not t:
         return None
@@ -55,8 +56,17 @@ def _candidate(name, where, grid):
             notes.append({"column": n, "count": len(bad), "examples": sorted(set(bad))[:5],
                           "text": f"{len(bad)} entr{'y' if len(bad) == 1 else 'ies'} in {n} "
                                   f"{'is' if len(bad) == 1 else 'are'} not a {typ} ({shown}) and will be treated as blank."})
+    net = accounting.debit_credit(names, types, cols)
+    if net:
+        names = names + [net[0]]; types = types + ["number"]; cols = cols + [net[1]]
+        report = report or {"template": None, "notes": []}
+        report["notes"].append("added Net amount (debit minus credit)")
     data = [list(r) for r in zip(*cols)] if cols else []
-    return {"name": name, "where": where, "columns": names, "types": types, "data": data, "notes": notes}
+    if report and (report["notes"] or report["template"]):
+        what = f"Recognised an export from {report['template']}" if report["template"] else "Recognised an accounting report layout"
+        notes.insert(0, {"column": None, "count": 0, "examples": [], "text": what + (": " + "; ".join(report["notes"]) if report["notes"] else "") + "."})
+    return {"name": name, "where": where, "columns": names, "types": types, "data": data, "notes": notes,
+            "template": report["template"] if report else None}
 
 
 def _xml_text(node, tag):
@@ -240,7 +250,7 @@ def preview(filename, data):
     PENDING[token] = {"file": filename, "tables": tables, "passages": passages}
     return {"file": filename, "token": token, "text_count": len(passages),
             "text_sample": [p["text"][:160] for p in passages[:3]],
-            "tables": [{"index": i, "name": t["name"], "where": t["where"], "rows": len(t["data"]),
+            "tables": [{"index": i, "name": t["name"], "where": t["where"], "rows": len(t["data"]), "template": t.get("template"),
                         "columns": [{"name": n, "type": ty} for n, ty in zip(t["columns"], t["types"])],
                         "sample": t["data"][:8], "notes": t["notes"]} for i, t in enumerate(tables)]}
 

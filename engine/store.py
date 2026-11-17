@@ -37,12 +37,24 @@ _DATE_FORMATS = ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d
 BLANKS = {"", "na", "n/a", "null", "none", "nan", "-", "--", "#n/a", "nil"}
 
 
+_CURRENCY = re.compile(r"^(rm|myr|sgd|s\$|usd|us\$|aud|a\$|nzd|gbp|eur|idr|rp|php|thb|hkd|inr|rs\.?)\s*|\s*(rm|myr|sgd|usd|aud|nzd|gbp|eur)$", re.I)
+_DRCR = re.compile(r"\s*(dr|cr)\.?$", re.I)
+
+
 def parse_number(v):
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)):
         return None if v != v else v
     s = str(v).strip()
+    side = _DRCR.search(s)                       # ledger balances such as "1,234.00 Cr"
+    if side and re.search(r"\d", s):
+        s = s[:side.start()].strip()
+    s = _CURRENCY.sub("", s).strip()
+    if s.startswith("-(") and s.endswith(")"):
+        s = s[1:]
+    if side and side.group(1).lower() == "cr" and not s.startswith("("):
+        s = "(" + s + ")"
     if not s or not _NUM.match(s) or not re.search(r"\d", s):
         return None
     neg = s.startswith("(") and s.endswith(")")
@@ -98,12 +110,11 @@ def infer_column(values):
                     bad.append(str(v))
                 out.append(n)
         return "number", out, bad
-    fmt = None
-    for v in present[:50]:
-        d, f = parse_date(v)
-        if d and f != "native":
-            fmt = f
-            break
+    fmt, sample = None, [v for v in present[:200] if isinstance(v, str)]
+    if sample:                       # the format that reads the most values (so 01/15/2025 picks month-first)
+        best = max(_DATE_FORMATS, key=lambda f: sum(1 for v in sample if parse_date(v, f)[1] == f))
+        if any(parse_date(v, best)[1] == best for v in sample):
+            fmt = best
     dates = [parse_date(v, fmt)[0] for v in present]
     d_ok = sum(1 for d in dates if d)
     if d_ok >= 0.9 * len(present):

@@ -41,9 +41,14 @@ def check(ds_id):
     allcols = ", ".join(q(n) for n in names)
     extra_rows = scalar(f"SELECT COALESCE(SUM(n - 1), 0) FROM (SELECT COUNT(*) n FROM {t} GROUP BY {allcols} HAVING n > 1)")
     if extra_rows:
+        # With an ID column (Order ID, Invoice No.) a whole repeated row is a copy made by mistake.
+        # Without one, identical rows can be real (two identical sales on the same day), so a person decides.
+        has_id = any(c["role"] == "id" for c in ds["columns"])
         add("duplicates", None, f"{_plural(extra_rows, 'row')} appear{'s' if extra_rows == 1 else ''} more than once",
-            "These rows are exact copies of another row, so totals would count them twice.",
-            extra_rows, "High",
+            "These rows are exact copies of another row, including the ID, so totals would count them twice." if has_id else
+            "These rows are exact copies of another row. There is no ID column to tell whether they are mistakes or real repeat entries, "
+            "such as two identical sales on the same day. Check before removing them.",
+            extra_rows, "High" if has_id else "Medium",
             f"_row NOT IN (SELECT MIN(_row) FROM {t} GROUP BY {allcols})",
             fix="Remove the extra copies")
 

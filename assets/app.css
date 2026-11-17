@@ -671,8 +671,8 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .frame.controls select { field-sizing: content; max-width: min(62vw, 340px); text-overflow: ellipsis; }
 
 /* ================= Invisible copy used to plan the scroll (never shown) */
-.ghost { position: absolute !important; left: -10000px; top: 0; visibility: hidden; pointer-events: none; contain: layout style; }
-.ghost, .ghost * { transition: none !important; animation: none !important; }
+.plan-copy { position: absolute !important; left: -10000px; top: 0; visibility: hidden; pointer-events: none; contain: layout style; }
+.plan-copy, .plan-copy * { transition: none !important; animation: none !important; }
 
 /* ================= Back in the step bar */
 .stepper .small-back { padding: 5px 12px 5px 10px; font-size: 13px; margin-right: 6px; letter-spacing: 0; }
@@ -721,3 +721,55 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .scard[data-mood="good"] .aura i:nth-child(3) { background: rgba(110, 204, 208, .07); }
 .scard[data-mood="good"] .aura b { border-color: rgba(80, 186, 130, .14); }
 @media (max-width: 760px) { .page-aura { --band: 27vw; } .page-aura i { filter: blur(30px); } .page-aura i:nth-child(n) { opacity: .85; } }
+
+/* ================= Quick checks (step 3) */
+.checks { margin-top: 30px; display: grid; gap: 14px; }
+.check-table { font-family: var(--serif); font-weight: 500; font-size: 26px; margin-top: 10px; }
+.check { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; }
+.check h3 { font-size: 17px; font-weight: 650; margin-bottom: 4px; }
+.check .muted { font-size: 14px; margin: 2px 0 12px; }
+.check > .seg + .muted { margin: 10px 0 0; }
+.check-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.check-row:first-of-type { border-top: 0; }
+.check-name { font-weight: 600; }
+.check-select { margin-top: 8px; font-size: 15px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--line-soft); padding: 4px; border-radius: 12px; }
+.seg button { border: 0; background: none; padding: 8px 14px; border-radius: 9px; font-weight: 600; font-size: 14px; color: var(--muted); transition: background .25s, color .25s, box-shadow .25s; }
+.seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(18, 22, 31, .14); }
+
+/* ================= Reconciliation, since last briefing, preparer's notes */
+.recon { max-width: 46em; margin: -26px auto 30px; text-align: center; }
+.recon > summary { list-style: none; cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 450; line-height: 1.5; width: auto; }
+.recon > summary::-webkit-details-marker { display: none; }
+.recon > summary::after { content: " Show the steps"; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.recon[open] > summary::after { content: " Hide the steps"; }
+.recon .table-wrap { margin-top: 12px; text-align: left; }
+.since-top { text-align: center; font-size: 13.5px; color: var(--muted); margin: -18px 0 26px; }
+.since { font-size: 14.5px; color: #3c4a8a; background: var(--accent-soft); border-radius: 10px; padding: 9px 13px; max-width: 44em; }
+.pnote-wrap { margin-top: 18px !important; }
+.pnote { border-left: 3px solid #d48a00; background: #fbf7ec; border-radius: 0 10px 10px 0; padding: 10px 14px; max-width: 44em; }
+.pnote p { font-family: var(--serif); font-size: 17px; line-height: 1.5; margin: 2px 0 6px; white-space: pre-wrap; }
+.pnote-k { display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #7a5400; }
+.pnote-input { display: block; width: 100%; max-width: 44em; margin: 6px 0 10px; font: inherit; font-size: 15px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); resize: vertical; }
+.add-note { font-size: 14px; }
+
+/* ================= Share */
+.story-foot { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 36px; }
+.share-sheet { width: min(640px, 100%); }
+.share-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.share-opt { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: grid; gap: 4px; transition: border-color .25s, transform .25s, box-shadow .25s; }
+.share-opt:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 10px 24px -14px rgba(18, 22, 31, .3); }
+.share-opt b { font-size: 16px; } .share-opt span { color: var(--muted); font-size: 13.5px; line-height: 1.4; }
+.share-opt:disabled { opacity: .6; }
+.measures-box { margin-top: 30px; }
+.measures-box .join p { margin-top: 2px; font-size: 13.5px; }
+@media (max-width: 760px) {
+  .share-grid { grid-template-columns: 1fr; }
+  .check { padding: 16px; } .seg { width: 100%; } .seg button { flex: 1 1 auto; padding: 9px 8px; }
+  .recon { margin-top: -14px; }
+}
+@media print {
+  .recon > summary::after, .since-top button, .add-note, .pnote-wrap .row, .pnote-wrap .link { display: none !important; }
+  .recon { margin: 0 0 8pt; text-align: left; } .recon .table-wrap { display: none; }
+  .pnote { break-inside: avoid; }
+}

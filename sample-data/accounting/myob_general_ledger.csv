@@ -1,0 +1,19 @@
+ID No.,Src,Date,Memo,Debit,Credit,Job No.
+4-1000 Sales
+8000,SJ,08/01/2025,Sale; Nimbus Clinics,,$941.63,
+8001,SJ,12/01/2025,Sale; Orchid Florist,,$984.51,
+8002,SJ,28/01/2025,Sale; Tidewater Books,,$754.08,
+8003,SJ,23/02/2025,Sale; Summit Optics,,$234.60,
+8004,SJ,28/02/2025,Sale; Orchid Florist,,$651.56,
+8005,SJ,13/03/2025,Sale; Orchid Florist,,$481.77,
+8006,SJ,13/03/2025,Sale; Nimbus Clinics,,$639.00,
+Total:,,,,$0.00,"$4,687.15",
+6-1100 Advertising
+9000,CD,17/01/2025,Online ads,$982.65,,
+9001,CD,23/01/2025,Online ads,$159.00,,
+9002,CD,09/02/2025,Online ads,$775.88,,
+9003,CD,21/02/2025,Online ads,"$1,227.15",,
+9004,CD,04/03/2025,Online ads,$848.06,,
+9005,CD,14/03/2025,Online ads,$706.83,,
+9006,CD,28/03/2025,Online ads,$532.61,,
+Total:,,,,"$5,232.18",$0.00,

@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.10");
+const worker = new Worker("assets/worker.js?v=2026-11-18.1");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -211,13 +211,13 @@ const orbEl = (size) => h("span", { class: "orb " + (size || ""), "aria-hidden":
 document.querySelectorAll("[data-orb]").forEach((el) => el.replaceWith(orbEl(el.dataset.orb)));
 const aura = () => h("span", { class: "aura", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("b"), h("b"));
 // The progress bar: each part is a button that takes you back (or forward) to that step once your data is in.
-const STEP_NAMES = ["Your files", "Tidy", "Choose what to understand"];
+const STEP_NAMES = ["Your files", "Tidy", "Quick checks", "Choose what to understand"];
 function stepper(n) {
   const back = n === 1 ? leaveFlow : () => goStep(n - 1);
   return h("nav", { class: "stepper", "aria-label": "Steps" },
     h("button", { class: "back small-back", title: n === 1 ? "Back" : `Back to step ${n - 1}`, onclick: back }, h("span", { "aria-hidden": "true" }, "←"), " Back"),
-    h("span", {}, `Step ${n} of 3`),
-    h("span", { class: "bars" }, [1, 2, 3].map((i) => h("button", {
+    h("span", {}, `Step ${n} of 4`),
+    h("span", { class: "bars" }, [1, 2, 3, 4].map((i) => h("button", {
       class: (i <= n ? "on" : "") + (i === n ? " cur" : ""), title: STEP_NAMES[i - 1], "aria-label": `Step ${i}: ${STEP_NAMES[i - 1]}`,
       "aria-current": i === n ? "step" : null, disabled: i !== n && (!S.state || (S.pending && i > 1)) ? true : null,
       onclick: () => { if (i !== n) goStep(i); } }, h("i")))));
@@ -226,7 +226,49 @@ function goStep(i) {
   S.pending = false;
   if (i === 1) reviewFiles();
   else if (i === 2) stepTidy(true);
+  else if (i === 3) stepChecks();
   else show("pick");
+}
+
+// Step 3: three quick checks, each with Gist's best guess already picked.
+const KIND_WORDS = [["money", "Money"], ["count", "A count or quantity"], ["rate", "An average or rate"]];
+function seg(options, value, onPick, label) {
+  const wrap = h("div", { class: "seg", role: "radiogroup", "aria-label": label });
+  const draw = (v) => wrap.replaceChildren(...options.map(([k, text]) => h("button", { type: "button", role: "radio", "aria-checked": String(k === v), onclick: () => { draw(k); onPick(k); } }, text)));
+  draw(value);
+  return wrap;
+}
+async function stepChecks() {
+  busy("Getting the quick checks ready…");
+  const r = await call("story_checks");
+  if (!r.tables.length) { show("pick"); return; }
+  const answers = r.tables.map((t) => ({ dataset: t.dataset, kinds: Object.fromEntries(t.measures.map((m) => [m.name, m.kind])), date: t.date, complete: t.last_month ? t.complete : null }));
+  const blocks = r.tables.map((t, ti) => {
+    const a = answers[ti];
+    return h("div", { class: "checks" },
+      r.tables.length > 1 ? h("h2", { class: "check-table" }, t.name) : null,
+      h("div", { class: "check" }, h("h3", {}, "What kind of number is each one?"),
+        h("p", { class: "muted" }, "Money and counts are added up. Averages and rates (prices, percentages, scores) are averaged instead."),
+        t.measures.map((m) => h("div", { class: "check-row" }, h("span", { class: "check-name" }, m.name), seg(KIND_WORDS, m.kind, (k) => (a.kinds[m.name] = k), m.name)))),
+      t.dates.length ? h("div", { class: "check" }, h("h3", {}, "Which date should the story follow?"),
+        t.dates.length > 1 ? h("select", { class: "check-select", onchange: (e) => (a.date = e.target.value) }, t.dates.map((d) => h("option", { selected: d === t.date }, d)))
+          : h("p", {}, "It will follow ", h("strong", {}, t.date), ".")) : null,
+      t.last_month ? h("div", { class: "check" }, h("h3", {}, `Is ${t.last_month} complete?`),
+        seg([[true, "Yes, it is complete"], [false, "No, it is still running"]], t.complete, (k) => (a.complete = k), "Last month complete"),
+        h("p", { class: "muted" }, "Gist's guess: " + t.why.replace(/^You (confirmed|said).*$/, ""))) : null);
+  });
+  const go = h("button", { class: "primary big", onclick: async () => {
+    go.disabled = true;
+    const res = await call("story_set_checks", { answers });
+    S.pick = { options: res.options, tidy: (S.pick || {}).tidy || {} };
+    if (S.story) S.story.fresh = true;
+    show("pick");
+  } }, "Looks right, continue");
+  flowPage(3,
+    h("h1", { class: "ask-big" }, "Three quick checks"),
+    h("p", { class: "frame" }, "I have picked my best guess for each. Change anything that is wrong, then continue."),
+    blocks,
+    h("div", { class: "flow-actions" }, go));
 }
 // Step 1 again, once the data is in: what was added, with the details folded away.
 function reviewFiles() {
@@ -332,11 +374,12 @@ function showPreview(previews) {
     if (!st.datasets.length) { S.flow = false; show("ask"); return; }
     stepTidy();
   });
+  const tpls = [...new Set(previews.flatMap((p) => (p.tables || []).map((t) => t.template).filter(Boolean)))];
   const say = tables ? `I found ${plural(tables, "table")} in your ${files === 1 ? "file" : "files"}.`
     : picks.length ? "I found text in your files, but no tables of numbers." : `I couldn't read ${files === 1 ? "this file" : "these files"}.`;
   flowPage(1,
     h("h1", { class: "ask-big" }, say),
-    h("p", { class: "frame" }, tables ? "Check this is what you expected, then continue." : picks.length ? "You can still ask questions about the text." : "Try saving it as Excel or CSV, then add it again."),
+    h("p", { class: "frame" }, tables ? (tpls.length ? `Recognised ${tpls.length === 1 ? "an export" : "exports"} from ${tpls.join(" and ")}, and tidied the report layout. ` : "") + "Check this is what you expected, then continue." : picks.length ? "You can still ask questions about the text." : "Try saving it as Excel or CSV, then add it again."),
     bad.length && picks.length ? h("p", { class: "caution" }, `I couldn't read ${bad.join(", ")}.`) : null,
     h("div", { class: "flow-actions" }, picks.length ? go : h("button", { class: "primary big", onclick: () => fileInput.click() }, "Choose other files"),
       h("button", { class: "link", onclick: leaveFlow }, picks.length ? "Start again with other files" : "Go back")),
@@ -350,12 +393,12 @@ async function stepTidy(review) {
   const o = await call("story_options");
   S.pick = o;
   const t = o.tidy, n = t.fixes + t.links;
-  if (!n && !review) { show("pick"); return; }
+  if (!n && !review) { stepChecks(); return; }
   if (!n) {
     flowPage(2,
       h("h1", { class: "ask-big" }, "Everything is tidy."),
       h("p", { class: "frame" }, t.to_review ? `${plural(t.to_review, "item")} still need${t.to_review === 1 ? "s" : ""} a person's judgement, such as unusually large values. They are not changed.` : "There is nothing left to fix."),
-      h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => show("pick") }, "Continue"),
+      h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepChecks() }, "Continue"),
         t.to_review ? h("button", { class: "link", onclick: () => show("data") }, "Look at them") : null));
     return;
   }
@@ -364,12 +407,12 @@ async function stepTidy(review) {
     const r = await atLeast(MIN_WAIT, call("story_tidy"));
     S.checks = {}; setState(r.state); S.pick = { options: r.options, tidy: r.tidy };
     toast(`${plural(r.done.length, "fix", "fixes")} applied.`);
-    show("pick");
+    stepChecks();
   } }, "Fix them all");
   flowPage(2,
     h("h1", { class: "ask-big" }, `I found ${plural(n, "thing")} to tidy.`),
     h("p", { class: "frame" }, "Tidying makes the story more accurate. Your original files are not changed."),
-    h("div", { class: "flow-actions" }, fix, h("button", { class: "link", onclick: () => show("pick") }, "Skip for now")),
+    h("div", { class: "flow-actions" }, fix, h("button", { class: "link", onclick: () => stepChecks() }, "Skip for now")),
     h("details", { class: "flow-more" }, h("summary", {}, "Show details"),
       h("ul", {},
         t.fixes ? h("li", {}, `${plural(t.fixes, "safe fix", "safe fixes")}, such as repeated rows, names spelt in different ways, or dates written in different formats.`) : null,
@@ -390,7 +433,9 @@ async function renderData() {
     h("div", { style: "margin-top:18px" }, h("button", { class: "secondary small", onclick: () => fileInput.click() }, "Add files")));
   const main = h("div", {});
   const fixBox = h("div", { class: "fixall" }, h("p", { class: "muted" }, h("span", { class: "spinner" }), "Checking…"));
-  root.replaceChildren(h("h2", {}, "Your data"), fixBox, h("div", { class: "data-grid" }, rail, main));
+  const measureBox = h("div", { class: "measures-box" });
+  root.replaceChildren(h("h2", {}, "Your data"), fixBox, h("div", { class: "data-grid" }, rail, main), measureBox);
+  drawMeasures(measureBox);
   call("story_options").then((o) => {
     S.pick = o;
     const t = o.tidy, n = t.fixes + t.links;
@@ -476,6 +521,45 @@ async function renderData() {
     h("div", { class: "types", style: "margin:12px 0 10px" }, ds.columns.map((c) => h("span", { class: "chip" }, c.name, h("span", { class: "t" }, TYPE_WORD[c.type])))),
     renderTable(peek.columns, peek.rows, peek.types)));
   if (st.log.length) main.append(h("details", { style: "margin-top:20px" }, h("summary", {}, "History of changes"), h("ol", { class: "muted", style: "margin:0;padding-left:20px" }, st.log.map((l) => h("li", {}, l.text)))));
+}
+
+// ---- measures built from two numbers: suggested ones, and ones the owner makes
+function measureDataset() {
+  return (S.story && S.story.spec.dataset) || (((S.pick || {}).options || [])[0] || {}).dataset || null;
+}
+async function drawMeasures(box) {
+  const dsId = measureDataset();
+  if (!dsId) { box.replaceChildren(); return; }
+  const m = await call("measure_list", { dataset: dsId });
+  box.replaceChildren(
+    h("div", { class: "section-title row" }, h("span", { class: "grow" }, "Measures built from two numbers"),
+      h("button", { class: "primary", onclick: () => openMeasureMaker(dsId, m, () => drawMeasures(box)) }, "Make a measure")),
+    h("div", { class: "card" },
+      m.suggested.length || m.mine.length ? null : h("div", { class: "pad muted" }, "None yet. Make one, for example Sales Amount divided by Quantity."),
+      [...m.suggested.map((x) => [x, false]), ...m.mine.map((x) => [x, true])].map(([x, mine]) => h("div", { class: "join" },
+        h("div", {}, h("span", { class: "pair" }, x.label), h("p", { class: "muted" }, x.formula + (mine ? "" : " Suggested automatically."))),
+        mine ? h("button", { class: "secondary", onclick: async () => { const r = await call("measure_remove", { value: x.value }); S.pick = { ...(S.pick || {}), options: r.options }; drawMeasures(box); } }, "Remove") : null))));
+}
+function openMeasureMaker(dsId, m, done) {
+  const opt = (v) => h("option", { value: v }, v);
+  const name = h("input", { type: "text", placeholder: "e.g. Sales per unit", "aria-label": "Name" });
+  const a = h("select", { "aria-label": "First number" }, m.numbers.map(opt));
+  const op = h("select", { "aria-label": "How to combine" },
+    h("option", { value: "divide" }, "divided by"), h("option", { value: "minus" }, "minus"),
+    m.ids.length ? h("option", { value: "per_id" }, "per different") : null, h("option", { value: "per_row" }, "per row"));
+  const b = h("select", { "aria-label": "Second number" });
+  const fillB = () => { b.hidden = op.value === "per_row"; b.replaceChildren(...(op.value === "per_id" ? m.ids : m.numbers).map(opt)); };
+  op.addEventListener("change", fillB); fillB();
+  const save = async () => {
+    const r = await call("measure_add", { dataset: dsId, name: name.value || `${a.value} ${op.options[op.selectedIndex].text} ${op.value === "per_row" ? "" : b.value}`.trim(), a: a.value, op: op.value, b: op.value === "per_row" ? null : b.value });
+    S.pick = { ...(S.pick || {}), options: r.options };
+    closeModal(); toast(`“${r.added.label}” is ready. Pick it from the number button on any card.`); done();
+  };
+  openModal(h("div", { class: "sheet", style: "width:min(620px,100%)" },
+    h("header", {}, h("h2", {}, "Make a measure"), h("p", { class: "sub" }, `Combine two numbers from ${m.base}. Gist works it out for every period and group, and shows the formula in "How I got this".`)),
+    h("div", { class: "body stack" }, h("label", { class: "stack" }, "Name", name), h("div", { class: "row" }, "Total", a, op, b)),
+    h("footer", {}, h("button", { class: "secondary", onclick: closeModal }, "Cancel"), h("button", { class: "primary", onclick: save }, "Save measure"))));
+  name.focus();
 }
 
 // ---------------------------------------------------------------- Ask
@@ -842,7 +926,7 @@ async function renderPick() {
     return card;
   }));
   root.replaceChildren(h("div", { class: "flow arrive" },
-    stepper(3),
+    stepper(4),
     h("h1", { class: "ask-big" }, "What do you want to understand?"),
     h("p", { class: "frame" }, options.length ? "Pick one. You can change it at any time." : "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further.")),
     options.length ? wrap : null);
@@ -883,25 +967,25 @@ async function renderStory() {
   const how = st.cards.find((c) => c.key === "how");
   const caution = how && how.actions.find((a) => a.link);
   if (!st.cards.some((c) => c.key === S.story.open)) S.story.open = null;
-  const cards = st.cards.map((c, i) => storyCard(c, i + 1, st, retell));
+  const last = lastBriefing(st);
+  const cards = st.cards.map((c, i) => storyCard(c, i + 1, st, retell, last));
   const yearSel = st.periods.length ? h("label", { class: "yearstart" }, "Business year starts in ",
     h("select", { onchange: (e) => { try { localStorage.setItem("gist.yearStart", e.target.value); } catch {} retell({ fiscal_start: Number(e.target.value) }); } },
       MONTHS.map((m, i) => h("option", { value: i + 1, selected: i + 1 === st.fiscal_start }, m)))) : null;
-  root.replaceChildren(
+  root.replaceChildren(...[
     h("div", { class: "backrow" }, h("button", { class: "back", title: "Back to: What do you want to understand?", onclick: () => show("pick") }, h("span", { "aria-hidden": "true" }, "←"), " Back")),
     h("p", { class: "frame controls" }, h("span", { class: "grp" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label)),
       period ? [" ", h("span", { class: "grp" }, "in ", period)] : null, filter ? [" ", h("span", { class: "grp" }, "for ", filter)] : null),
     h("div", { class: "print-title" }, h("h1", {}, st.title), h("p", {}, `Prepared ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} from ${st.source}`)),
+    h("details", { class: "recon" }, h("summary", {}, st.reconcile.line),
+      renderTable(st.reconcile.columns, st.reconcile.steps.map((r) => [r[0], r[1], r[2] === null || r[2] === undefined ? null : Math.round(r[2] * 100) / 100]), ["text", "number", "number"], { dash: true })),
+    last ? h("p", { class: "since-top" }, `Compared with your last briefing on ${fmtDay(last.date)} (${last.period}). `,
+      h("button", { class: "link", onclick: () => { forgetBriefing(); renderStory(); } }, "Forget it")) : null,
     caution ? h("p", { class: "caution" }, caution.why + " ", h("button", { class: "link", onclick: () => show("data") }, "Review now")) : null,
     h("div", { class: "scards" + (S.story.arrived ? "" : " arrive") }, cards),
-    h("div", { class: "story-foot row" },
-      h("button", { class: "secondary", onclick: async () => {
-        try { await navigator.clipboard.writeText(st.summary); } catch { const t = h("textarea", { style: "position:fixed;opacity:0" }, st.summary); document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); }
-        toast("Summary copied. Paste it into an email or message.");
-      } }, "Copy summary"),
-      h("button", { class: "secondary", onclick: () => window.print() }, "Print briefing"),
-      h("span", { class: "grow" }),
-      S.explore ? yearSel : null));
+    h("div", { class: "story-foot" },
+      h("button", { class: "primary big", onclick: () => openShare(st) }, "Share the briefing"),
+      S.explore ? yearSel : null)].filter(Boolean));
   S.story.arrived = true;
   openCard(S.story.open, false);
 }
@@ -935,7 +1019,7 @@ function toggleCards(wrap, key, byHand) {
 function scrollPlan(wrap, key) {
   const ghost = wrap.cloneNode(true);
   ghost.classList.remove("arrive");
-  ghost.classList.add("ghost", "has-open");
+  ghost.classList.add("plan-copy", "has-open");
   ghost.style.width = wrap.getBoundingClientRect().width + "px";
   ghost.querySelectorAll(":scope > .scard").forEach((el) => el.classList.toggle("open", el.dataset.key === key));
   wrap.after(ghost);                                             // same place in the page, so the same styles apply
@@ -1016,7 +1100,43 @@ function railButton(icon, label, heading, items, pick) {
   return item;
 }
 
-function storyCard(c, n, st, retell) {
+// ---- the preparer's notes: the person writes the reasons, Gist keeps the facts (kept for this visit only)
+S.notes = {};
+const noteKey = (st, key) => `${st.label}|${key}`;
+function noteBox(c, st) {
+  const box = h("div", { class: "pnote-wrap" });
+  const draw = (editing) => {
+    const text = S.notes[noteKey(st, c.key)] || "";
+    if (editing) {
+      const ta = h("textarea", { class: "pnote-input", rows: 3, placeholder: "For example: the September dip follows the warehouse move." }, text);
+      box.replaceChildren(h("label", { class: "pnote-k" }, "Preparer's note"), ta,
+        h("div", { class: "row" }, h("button", { class: "primary", onclick: () => { const v = ta.value.trim(); if (v) S.notes[noteKey(st, c.key)] = v; else delete S.notes[noteKey(st, c.key)]; draw(false); } }, "Save note"),
+          h("button", { class: "secondary", onclick: () => draw(false) }, "Cancel")));
+      setTimeout(() => ta.focus(), 30);
+    } else if (text) {
+      box.replaceChildren(h("div", { class: "pnote" }, h("span", { class: "pnote-k" }, "Preparer's note"), h("p", {}, text),
+        h("button", { class: "link", onclick: () => draw(true) }, "Edit note")));
+    } else {
+      box.replaceChildren(h("button", { class: "link add-note", onclick: () => draw(true) }, "+ Add a note"));
+    }
+  };
+  draw(false);
+  return box;
+}
+
+// ---- since your last briefing: only the headline figures of an exported briefing are kept, never the data
+const BRIEF_KEY = "gist.lastBriefing";
+const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+function lastBriefing(st) {
+  try { const b = JSON.parse(localStorage.getItem(BRIEF_KEY) || "null"); return b && b.label === st.label ? b : null; } catch { return null; }
+}
+function saveBriefing(st) {
+  try { localStorage.setItem(BRIEF_KEY, JSON.stringify({ date: new Date().toISOString(), label: st.label, period: st.period_label,
+    cards: Object.fromEntries(st.cards.map((c) => [c.key, (c.brief || {}).text || c.sentence])) })); } catch {}
+}
+function forgetBriefing() { try { localStorage.removeItem(BRIEF_KEY); } catch {} }
+
+function storyCard(c, n, st, retell, last) {
   const spec = S.story.spec;
   const rail = [];
   if (c.key !== "how" && st.measures.length > 1) rail.push(railButton("number", "Change the number", "Number (every card follows)",
@@ -1027,7 +1147,10 @@ function storyCard(c, n, st, retell) {
     c.chart_types.map((t) => ({ key: t.key, label: t.label, on: t.key === c.chart_type })), (k) => retell({ charts: { ...(spec.charts || {}), [c.key]: k } })));
   const body = h("div", { class: "sbody" });
   if (rail.length) body.append(h("div", { class: "edge" }, rail));
+  const then = last && last.cards[c.key], now = (c.brief || {}).text || c.sentence;
+  if (then && then !== now) body.append(h("p", { class: "since" }, h("strong", {}, `Since your last briefing (${fmtDay(last.date)}): `), `then ${then.replace(/\.$/, "")}.`));
   if (c.more.length) body.append(h("p", { class: "more" }, c.more.join(" ")));
+  body.append(noteBox(c, st));
   if (c.actions) body.append(h("ol", { class: "actions" }, c.actions.map((a) => h("li", {}, h("strong", {}, a.do), h("span", {}, a.why)))));
   if (c.note) body.append(h("p", { class: "fine" }, c.note));
   if (c.chart || c.forecast) body.append(h("div", { class: "chart-box", style: `height:${chartHeight(c.forecast ? { type: "forecast" } : c.chart)}px` }, h("canvas", { role: "img", "aria-label": c.forecast ? "Forecast (an estimate)" : c.sentence })));

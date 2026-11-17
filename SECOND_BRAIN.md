@@ -12,7 +12,7 @@ How it is used:
 - **The app reads the "Business words" table** below when it starts, so the
   chatbot understands the business's own vocabulary.
 
-Last updated: 2026-11-17
+Last updated: 2026-11-18
 
 ## Purpose
 
@@ -239,6 +239,46 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   overall change; Who, Which and How are always neutral.
 - R75. At the end of each round of changes, Claude asks the owner whether to
   publish to main, instead of waiting to be told.
+- R76. Steps after adding files are four: 1 Files, 2 Tidy, 3 Quick checks, 4 Choose.
+  Quick checks ask, with Gist's guess already picked: what kind each number is
+  (money, a count or quantity, or an average or rate), which date the story
+  follows, and whether the last month is complete.
+- R77. The story shows a reconciliation line under its controls: rows in the
+  file, rows removed when tidying, rows used, how the measure's total compares
+  with the file and why it differs, any filter, and the period's figure.
+  "Show the steps" opens the full breakdown. It is printed and exported too.
+- R78. A month counts as complete by the calendar (last date within 3 days of
+  month-end, or data dated once a month), unless the owner answers otherwise in
+  the quick checks. Replaces the old "stops before day 22" rule.
+- R79. Numbers that should not be added up (price, rate, score, percentage) are
+  offered as averages ("Average Unit Price"). Shares of a total, the Why card and
+  the reliance step are left out for them. Updates R40 (totals only).
+- R80. Identical rows are removed automatically only when the table has an ID
+  column (Order ID, Invoice No.). Without one they are flagged for a person.
+- R81. "Since your last briefing": when a briefing is shared or printed, only its
+  headline figures and date are kept in this browser (never rows or files). With
+  the same subject next time, each changed card shows one line with the earlier
+  figure, and a line at the top says which briefing is compared ("Forget it"
+  clears it). Saved workspaces were not wanted.
+- R82. "Share the briefing" (one button at the foot of the story) offers a PDF
+  file, PowerPoint slides (notes and workings in the speaker notes), an email
+  draft (.eml, opens unsent with the briefing written out and the PDF attached),
+  and copy for email (formatted). Print remains.
+- R83. Derived measures are suggested when the fields exist: Margin (sales minus
+  cost, using Quantity × Unit Cost when only a unit cost exists), Margin %,
+  Average order value (per different order ID), Average price per unit. Under
+  Explore further, "Your data" has "Make a measure" (a number minus, divided
+  by, per different ID, or per row). Each shows its formula in "How I got this".
+- R84. Preparer's notes: one note per card, written by the person, shown clearly
+  marked "Preparer's note" beside Gist's figures and carried into every export.
+  Notes are kept for the visit only.
+- R85. Exports from Xero, QuickBooks, AutoCount, SQL Account, SAP Business One,
+  Sage and MYOB are recognised: title rows above the header skipped, group
+  headings (customer or account names on their own row) turned into a column,
+  subtotal and total rows left out, amounts like (1,234.00), 1,234.00 Cr and
+  RM 1,234 read correctly, and Debit/Credit combined into Net amount. Step 1
+  says which system was recognised. Built from standard layouts; to be checked
+  against real exports.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -283,13 +323,18 @@ that matter, who uses the output.
 | 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
 | 2026-11-17 | The Dribbble orb reference could not be read from the build environment (the site blocks automated visits), so the orb was matched to a screenshot the owner uploaded. | Owner's choice to share the image. |
 | 2026-11-17 | The chart in an open card is drawn about 0.4 seconds into the opening, and its space is reserved in advance. | Drawing during the first frames made the opening stutter, and late sizing made it jump. |
+| 2026-11-18 | Briefing figures (not data) are kept in the browser's local storage after sharing, for "since your last briefing". | Owner's choice; the recorded "data in memory only" rule still holds for rows and files. |
+| 2026-11-18 | PDF and PowerPoint makers (jsPDF 2.5.2, PptxGenJS 3.12.0, both MIT) are stored in assets/vendor and loaded only when exporting. | No new network host; nothing leaves the browser. |
+| 2026-11-18 | The PDF uses standard fonts, which cover Western European text only. Names in other scripts (for example Chinese) may not print correctly in the PDF; the slides and email are not affected. | Keeps the PDF maker small. Can be revisited if needed. |
+| 2026-11-18 | Average order value and margin are worked out on the combined (linked) table so cost and order fields from linked tables can be used. | Unit Cost lives in the Products table in the sample data. |
+| 2026-11-18 | Who and Which for averages and ratios leave out groups with fewer than 3 rows. | An average of one or two rows says little and would top every ranking. |
 | 2026-11-17 | Work for Gist was built on branch `claude/gist-story`; `main` (the live site) changes only when the owner approves. | The owner reviews before publishing. |
 | 2026-11-16 | The story project lives in its own repository, `evalim0509/analyticsstoryweb` (branch `main`). `analyticschatbotv1` keeps the original three-tab version. | Owner's choice, so the two products can evolve separately. |
 
 ## Open questions
 
-- Should imported data be remembered between visits (stored in the browser), or
-  always start fresh? Currently always fresh.
+- Imported data is not remembered between visits (owner skipped saved
+  workspaces, 2026-11-18). Only shared briefings' headline figures are kept.
 - Largest file size the business expects? The browser engine is comfortable up
   to roughly a few hundred thousand rows.
 - Are there fixed business definitions (for example what counts as an active
@@ -307,6 +352,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-18 | Quick checks step; reconciliation line; calendar month-end; averages for rates; ID-based duplicate removal; since-last-briefing figures; PDF, slides, email draft and copy-for-email export; derived measures and Make a measure; preparer's notes; accounting export templates (Xero, QuickBooks, AutoCount, SQL Account, SAP B1, Sage, MYOB) with dummy samples. Fixed: the header buttons (Explore further, Add files, Business words) had been pushed off screen by the scroll-planning copy's class name. |
 | 2026-11-17 | First-page wave band narrowed on phones; step 3 "preparing your story" screen shortened to about 2 seconds. |
 | 2026-11-17 | First-page background waves now run as a band down the middle of the whole page. |
 | 2026-11-17 | First-page background waves narrowed to the middle and changed to pale teal, sky, aqua and periwinkle blues. |

@@ -140,8 +140,11 @@ def forecast(spec):
     first, last = main[0], main[-1]
     if grain == "month":           # drop a final month that is clearly incomplete
         last_day = max(int(d[8:10]) for d, _ in raw if _period(d, grain) == last)
-        if last_day < 22 and last - first > 3:
-            notes.append(f"Left out {_period_label(last, grain)} because the month is not complete yet (data stops on day {last_day}).")
+        from . import measures as MS
+        base = store.DATASETS[ds.get("base", ds["id"])]
+        done, why = MS.month_complete(base, date, last, last_day) if date in [c["name"] for c in base["columns"]] else (last_day >= 25, "")
+        if not done and last - first > 3:
+            notes.append(f"Left out {_period_label(last, grain)}. {why}".strip())
             last -= 1
 
     def combine(vs):
