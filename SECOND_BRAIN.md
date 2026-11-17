@@ -313,6 +313,22 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   a "Review the matches" link. Catalogues also remember added-up / averaged.
 - R93. The reconciliation line ("From 1,783 rows in ...") sits at the bottom of
   the story page, under the Share button.
+- R94. Changes carry arrows and colours by meaning: for sales-like numbers a rise
+  is a green ▲ and a fall a red ▼; for cost-like numbers a rise is red and a
+  fall green; no real change is a grey marker. They appear as chips in the
+  card's sentence ("▼ 5% vs Q2 2025", closed cards too), on bullets, in table
+  change columns, and in charts that compare with an earlier period.
+- R95. Each card's explanation is short bullet points with names and figures in
+  bold, all shown. Each open card starts with its headline figure in large type.
+- R96. Charts point at the answer: the bar the sentence is about is in the main
+  colour and the rest grey, the latest period is picked out (green or red by
+  meaning on What), values are written on the bars, and "All others" is left
+  out of bar charts (it stays in the share ring).
+- R97. Tables show the top 5 rows with "Show all", plain column titles
+  ("Share of total", "vs Q2 2025"), arrows on changes, and a thin bar behind
+  each share. Figures in tables stay exact (decision of 2026-11-16 kept).
+- R98. The Why table no longer has "Share of the change (%)"; the coloured Change
+  column says it more plainly.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -357,6 +373,7 @@ that matter, who uses the output.
 | 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
 | 2026-11-17 | The Dribbble orb reference could not be read from the build environment (the site blocks automated visits), so the orb was matched to a screenshot the owner uploaded. | Owner's choice to share the image. |
 | 2026-11-17 | The chart in an open card is drawn about 0.4 seconds into the opening, and its space is reserved in advance. | Drawing during the first frames made the opening stutter, and late sizing made it jump. |
+| 2026-11-18 | Who and Which still prefer a grouping with few values (for example Segment, or a matched Salesperson) for the headline; a matched Customer with many values stays one tap away. | A share of 7% among 131 customers says less than a share among 4 segments. |
 | 2026-11-18 | When guessing the sales field, line-level amounts (Line Amount, Row Total, Sales Amount) are preferred. | In Xero exports the invoice Total repeats on every line, so adding it up would overcount. |
 | 2026-11-18 | Catalogues match by column name only, across all tables at once. | Simplest to fill in; the table name is shown beside each column. |
 | 2026-11-18 | Briefing figures (not data) are kept in the browser's local storage after sharing, for "since your last briefing". | Owner's choice; the recorded "data in memory only" rule still holds for rows and files. |
@@ -388,6 +405,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-18 | Story cards: coloured ▲/▼ chips in sentences, big headline figure, bold bullets with arrows, highlighted charts with values on bars, short tables with arrows and share bars. |
 | 2026-11-18 | Quick checks merged into Match your fields (four steps); matching redesigned as two plain columns with pills and tags, Continue at top and bottom; one-line page for returning users; catalogues keep added-up/averaged; reconciliation line moved to the bottom of the story. |
 | 2026-11-18 | Data catalogues: Match your fields step, saved named catalogues (download and load), Catalogues tab, matched fields used by the engine and taught to Ask. "A look at" line made the headline; reconciliation made small. Fixed stray "null" text on some screens. |
 | 2026-11-18 | Quick checks step; reconciliation line; calendar month-end; averages for rates; ID-based duplicate removal; since-last-briefing figures; PDF, slides, email draft and copy-for-email export; derived measures and Make a measure; preparer's notes; accounting export templates (Xero, QuickBooks, AutoCount, SQL Account, SAP B1, Sage, MYOB) with dummy samples. Fixed: the header buttons (Explore further, Add files, Business words) had been pushed off screen by the scroll-planning copy's class name. |

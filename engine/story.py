@@ -196,9 +196,9 @@ def _dims(ds, base):
     for c in ds["columns"]:               # a matched column is used even when its name gives no hint
         if c["name"] not in have and c["distinct"] >= 2 and c["type"] != "date" and c["name"] in pinned_who + pinned_which:
             (who if c["name"] in pinned_who else which).append(c)
-    who.sort(key=lambda c: (c["name"] not in pinned_who, pinned_who.index(c["name"]) if c["name"] in pinned_who else 0, c["distinct"] > 15, c["distinct"]))
+    who.sort(key=lambda c: (c["distinct"] > 15, c["name"] not in pinned_who, pinned_who.index(c["name"]) if c["name"] in pinned_who else 0, c["distinct"]))
     hints = ["product", "categor", "region", "channel", "department", "type", "brand", "store", "branch", "country"]
-    which.sort(key=lambda c: (c["name"] not in pinned_which, pinned_which.index(c["name"]) if c["name"] in pinned_which else 0, c["distinct"] > 40, next((i for i, h in enumerate(hints) if h in c["name"].lower()), 50), c["distinct"]))
+    which.sort(key=lambda c: (c["distinct"] > 40, c["name"] not in pinned_which, pinned_which.index(c["name"]) if c["name"] in pinned_which else 0, next((i for i, h in enumerate(hints) if h in c["name"].lower()), 50), c["distinct"]))
     return [c["name"] for c in who], [c["name"] for c in which]
 
 
@@ -256,6 +256,29 @@ def build(spec):
 
     def short(v):                       # figures the way people say them; percentages with one decimal
         return "nothing" if v is None else f"{v:.1f}%" if unit == "%" else _short(v)
+
+    def moodof(up):
+        return "good" if up != lower_better else "bad"
+
+    def chip(cur_v, old_v, against):
+        """A coloured change marker for a sentence: '▼ 5% vs Q2 2025'."""
+        if old_v is None:
+            return None
+        if unit == "%":
+            d = cur_v - old_v
+            flat, text = abs(d) < 0.05, f"{abs(d):.1f} pts vs {against}"
+        else:
+            p_ = _pct(cur_v, old_v)
+            if p_ is None:
+                return None
+            flat, text = abs(p_) < 0.5, f"{abs(p_):.0f}% vs {against}"
+        if flat:
+            return {"chip": f"level with {against}", "dir": "flat", "mood": "neutral"}
+        return {"chip": text, "dir": "up" if cur_v > old_v else "down", "mood": moodof(cur_v > old_v)}
+
+    def B(text, up=None):
+        """A bullet. **bold** marks names and figures; up=True/False adds an arrow coloured by meaning."""
+        return {"t": text, "dir": None if up is None else ("up" if up else "down"), "mood": None if up is None else moodof(up)}
     scope = f" (only where {' and '.join(fwords)})" if fwords else ""
     start = f"Started with “{ds['name']}” ({ds['rows']:,} rows)" + (f", keeping only rows where {' and '.join(fwords)}." if fwords else ".")
     who_dims, which_dims = _dims(ds, base)
@@ -344,8 +367,8 @@ def build(spec):
         table.append([prev_label, pv, _pct(now, pv)])
         chart_pts.append((prev_label, pv))
         if pv and now != pv:
-            more.append((f"That is {abs(now - pv):.1f} points {'higher' if now >= pv else 'lower'}" if unit == "%" else f"That is {short(abs(now - pv))} {'more' if now >= pv else 'less'}")
-                        + f" than {prev_label}, which closed at {short(pv)}.")
+            more.append(B((f"**{abs(now - pv):.1f} points {'higher' if now >= pv else 'lower'}**" if unit == "%" else f"**{short(abs(now - pv))} {'more' if now >= pv else 'less'}**")
+                          + f" than {prev_label}, which closed at **{short(pv)}**", now > pv))
     if yoy:
         yv = run.total(*yoy)
         mv = _move(now, yv, lower_better, unit)
@@ -353,8 +376,10 @@ def build(spec):
             bits.append(f"{mv} {yoy_label}")
         table.append([yoy_label, yv, _pct(now, yv)])
         chart_pts.insert(0, (yoy_label, yv))
+    what_parts = None
     if cur:
         s = f"{label} {'came to' if pv and now < pv else 'reached'} {short(now)} in {plabel}" + (", " + " and ".join(bits) if bits else "") + "."
+        what_parts = [f"{label} {'came to' if pv and now < pv else 'reached'} {short(now)} in {plabel}"] + [c_ for c_ in (chip(now, pv, prev_label) if prev else None, chip(now, yv, yoy_label) if yoy else None) if c_]
     else:
         s = f"{label} {'totalled' if M['additive'] else 'came to'} {short(now)} across all the data."
     chart_pts.append((plabel, now))
@@ -388,15 +413,19 @@ def build(spec):
                 tinfo = {"items": items, "pace": pace, "year": ylabel, "actual": ta, "target": tt, "reached": 100.0 * ta / tt, "word": word,
                          "dim": target["dim"], "source": target["table"]["name"], "left": left}
                 state = "ahead of" if tinfo["reached"] > pace + 3 else "behind" if tinfo["reached"] < pace - 3 else "in line with"
-                more.append(f"For {ylabel} to date, {label} stands at {short(ta)} against a {word} of {short(tt)}: {tinfo['reached']:.0f}% delivered with {pace:.0f}% of the year elapsed, {state} the pace required.")
+                more.append(B(f"{ylabel} to date: **{short(ta)}** against a {word} of **{short(tt)}**, **{tinfo['reached']:.0f}% delivered** with {pace:.0f}% of the year gone, {state} the pace required",
+                              None if state == "in line with" else (state == "ahead of") != lower_better))
     steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"{M['verb']} for {plabel}."]
     if prev or yoy:
         steps.append("Did the same for " + " and ".join(x for x in (prev_label, yoy_label) if x) + ", and compared.")
     if tinfo:
         steps.append(f"Compared {tinfo['year']} so far with the {tinfo['word']} in “{tinfo['source']}”.")
-    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "more": more, "brief": {"text": f"{short(now)} in {plabel}"}, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
-                  "chart": {"type": "bar", "labels": [p[0] for p in chart_pts], "series": [{"name": label, "data": [p[1] for p in chart_pts]}], "x_title": "", "y_title": label, "time": True} if len(chart_pts) > 1 else None,
-                  "table": {"columns": ["Period", label, "Change to now (%)"], "rows": [[r[0], r[1], None if r[2] is None else round(r[2], 1)] for r in table]},
+    cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "parts": what_parts, "more": more, "brief": {"text": f"{short(now)} in {plabel}"},
+                  "hero": {"big": short(now), "small": plabel if cur else "across all the data"}, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
+                  "chart": {"type": "bar", "labels": [p[0] for p in chart_pts], "series": [{"name": label, "data": [p[1] for p in chart_pts]}], "x_title": "", "y_title": label, "time": True,
+                            "values": True, "mood_last": (chip(now, pv, "") or {}).get("mood") if prev else None} if len(chart_pts) > 1 else None,
+                  "table": {"columns": ["Period", label, "Change to now"], "rows": [[r[0], r[1], None if r[2] is None else round(r[2], 1)] for r in table],
+                            "meta": {"pct": [2], "up_good": not lower_better}},
                   "steps": steps, "sql": run.sql.get("what")})
 
     # ---------------- WHO and WHICH (left out when the data has no such field)
@@ -419,58 +448,59 @@ def build(spec):
             s = f"{top['name']} was the only {dim} recorded, at {short(top['value'])}."
         else:
             s = f"{top['name']} accounted for {top['share']:.0f}% of {of_what}, the largest share of any {dim}."
-            more.append(f"That is {short(top['value'])} of {short(total)}" + (f" in {plabel}." if cur else "."))
+            more.append(B(f"**{short(top['value'])}** of **{short(total)}**" + (f" in {plabel}" if cur else "")))
         if len(items) > 4:
-            more.append(f"The three largest of {len(items):,} together made up {sum(i['share'] for i in items[:3]):.0f}%.")
+            more.append(B(f"The three largest of {len(items):,} together: **{sum(i['share'] for i in items[:3]):.0f}%**"))
         elif len(named) > 1:
-            more.append(f"{named[-1]['name']} was the smallest, at {short(named[-1]['value'])} ({named[-1]['share']:.0f}%).")
+            more.append(B(f"**{named[-1]['name']}** was the smallest: {short(named[-1]['value'])} ({named[-1]['share']:.0f}%)"))
         up, down = _movers(items, total) if prev else (None, None)
-        if up or down:
-            parts = []
-            if up:
-                parts.append(f"{up['name']} gained the most ({_signed(up['value'] - up['before'])}, up {abs(up['change']):.0f}%)")
-            if down:
-                parts.append(f"{down['name']} lost the most ({_signed(down['value'] - down['before'])}, down {abs(down['change']):.0f}%)")
-            more.append(f"Against {prev_label}, " + " while ".join(parts) + ".")
+        if up:
+            more.append(B(f"**{up['name']}** gained the most vs {prev_label}: **{_signed(up['value'] - up['before'])}** ({abs(up['change']):.0f}%)", True))
+        if down:
+            more.append(B(f"**{down['name']}** lost the most vs {prev_label}: **{_signed(down['value'] - down['before'])}** ({abs(down['change']):.0f}%)", False))
         moves.append({"dim": dim, "up": up, "down": down, "top": top, "count": len(items)})
         kind = _chart_choice(spec, key, SHARE)
         keep = 5 if kind == "share" else 8
         shown = items[:keep]
-        rest = sum(i["value"] for i in items[keep:])
+        rest = sum(i["value"] for i in items[keep:]) if kind == "share" else 0     # a ring needs the rest; bars compare the leaders
         labels = [i["name"] for i in shown] + (["All others"] if rest else [])
         data = [i["value"] for i in shown] + ([rest] if rest else [])
-        cols = [dim, label, "Share (%)"] + ([f"Change on {prev_label} (%)"] if prev else [])
+        cols = [dim, label, "Share of total"] + ([f"vs {prev_label}"] if prev else [])
         trows = [[i["name"], i["value"], round(i["share"], 1)] + ([None if i["change"] is None else round(i["change"], 1)] if prev else []) for i in items[:200]]
         steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"Grouped the rows for {plabel} by {dim} and {'counted them' if not value else ('added up ' + label if M['column'] else 'worked out ' + label)}.",
                                    "Worked out each group's share of the total."]
         if prev:
             steps.append(f"Did the same for {prev_label} to see who rose and fell. Small groups (under 3% of the total) are not named as risers or fallers.")
         return {"key": key, "word": word, "ask": ask, "sentence": s, "more": more, "dims": dims, "dim": dim,
+                "hero": {"big": f"{top['share']:.0f}%", "small": f"{top['name']}, of {of_what}"} if len(items) > 1 else {"big": short(top["value"]), "small": top["name"]},
                 "chart_types": [{"key": k, "label": l} for k, l in SHARE] if len(items) > 1 else [], "chart_type": kind,
-                "chart": {"type": "share" if kind == "share" else "hbar", "labels": labels, "series": [{"name": label, "data": data}], "x_title": dim, "y_title": label} if len(items) > 1 else None,
-                "table": {"columns": cols, "rows": trows}, "steps": steps, "sql": run.sql.get(key)}
+                "chart": {"type": "share" if kind == "share" else "hbar", "labels": labels, "series": [{"name": label, "data": data}], "x_title": dim, "y_title": label,
+                          "values": True, "highlight": labels.index(top["name"]) if top["name"] in labels else 0} if len(items) > 1 else None,
+                "table": {"columns": cols, "rows": trows, "meta": {"share": 2, "pct": [3] if prev else [], "up_good": not lower_better}}, "steps": steps, "sql": run.sql.get(key)}
 
     def ratio_card(key, word, ask, dims, dim, items, named):
         """Who / Which for an average or a ratio: highest and lowest groups; shares of a total do not apply."""
         top, low = named[0], named[-1]
         s = f"{top['name']} had the highest {label} of any {dim}, at {short(top['value'])}." if len(named) > 1 else f"{top['name']} was the only {dim} recorded, at {short(top['value'])}."
-        more = [f"{low['name']} was the lowest, at {short(low['value'])}."] if len(named) > 1 else []
+        more = [B(f"**{low['name']}** was the lowest: **{short(low['value'])}**")] if len(named) > 1 else []
         moved = [i for i in named if i["change"] is not None and i["before"]]
         if prev and len(moved) > 1:
             up = max(moved, key=lambda i: i["value"] - i["before"]); down = min(moved, key=lambda i: i["value"] - i["before"])
-            parts = ([f"{up['name']} rose the most (from {short(up['before'])} to {short(up['value'])})"] if up["value"] > up["before"] else []) + \
-                    ([f"{down['name']} fell the most (from {short(down['before'])} to {short(down['value'])})"] if down["value"] < down["before"] else [])
-            if parts:
-                more.append(f"Against {prev_label}, " + " while ".join(parts) + ".")
+            if up["value"] > up["before"]:
+                more.append(B(f"**{up['name']}** rose the most vs {prev_label}: {short(up['before'])} to **{short(up['value'])}**", True))
+            if down["value"] < down["before"]:
+                more.append(B(f"**{down['name']}** fell the most vs {prev_label}: {short(down['before'])} to **{short(down['value'])}**", False))
         shown = items[:8]
-        cols = [dim, label] + ([f"Change on {prev_label} ({'points' if unit == '%' else '%'})"] if prev else [])
+        cols = [dim, label] + ([f"vs {prev_label}"] if prev else [])
         chg = lambda i: None if i["before"] is None else round(i["value"] - i["before"], 1) if unit == "%" else (None if i["change"] is None else round(i["change"], 1))
         trows = [[i["name"], round(i["value"], 2)] + ([chg(i)] if prev else []) for i in items[:200]]
         steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"Grouped the rows for {plabel} by {dim} and worked out {label} for each group.",
                  "Left out groups with fewer than 3 rows, because an average of one or two rows says little."]
         return {"key": key, "word": word, "ask": ask, "sentence": s, "more": more, "dims": dims, "dim": dim, "chart_types": [], "chart_type": "bars",
-                "chart": {"type": "hbar", "labels": [i["name"] for i in shown], "series": [{"name": label, "data": [i["value"] for i in shown]}], "x_title": dim, "y_title": label} if len(items) > 1 else None,
-                "table": {"columns": cols, "rows": trows}, "steps": steps, "sql": run.sql.get(key),
+                "hero": {"big": short(top["value"]), "small": f"{top['name']}, the highest"},
+                "chart": {"type": "hbar", "labels": [i["name"] for i in shown], "series": [{"name": label, "data": [i["value"] for i in shown]}], "x_title": dim, "y_title": label,
+                          "values": True, "unit": unit, "highlight": [i["name"] for i in shown].index(top["name"]) if top["name"] in [i["name"] for i in shown] else 0} if len(items) > 1 else None,
+                "table": {"columns": cols, "rows": trows, "meta": {"pct" if unit != "%" else "pts": [2] if prev else [], "up_good": not lower_better}}, "steps": steps, "sql": run.sql.get(key),
                 "brief": {"text": s}}
 
     who_card = dim_card("who", "Who", "Who is behind it?", who_dims, spec.get("who"))
@@ -485,26 +515,31 @@ def build(spec):
         yearly = 100 * slope * 12 / (abs(y.mean()) or 1)
         trend = f"has risen by about {abs(yearly):.0f}% a year" if yearly > 3 else f"has fallen by about {abs(yearly):.0f}% a year" if yearly < -3 else "has held broadly steady"
         s = f"{label} {trend} over the {n} months from {_mlabel(series[0][0])} to {_mlabel(series[-1][0])}."
+        span_words = f"over the {n} months from {_mlabel(series[0][0])} to {_mlabel(series[-1][0])}"
+        when_parts = [label, {"chip": f"about {abs(yearly):.0f}% a year", "dir": "up" if yearly > 0 else "down", "mood": moodof(yearly > 0)} if abs(yearly) > 3 else
+                      {"chip": "broadly steady", "dir": "flat", "mood": "neutral"}, span_words]
         more = []
         if n >= 24:
             detr = y - np.polyval(np.polyfit(np.arange(n), y, 1), np.arange(n))
             by_m = [float(np.mean([detr[i] for i in range(n) if series[i][0] % 12 == k] or [0])) for k in range(12)]
             if (max(by_m) - min(by_m)) / (abs(y.mean()) or 1) > 0.1:
-                more.append(f"There is a yearly rhythm: {MON[int(np.argmax(by_m))]} is typically the strongest month and {MON[int(np.argmin(by_m))]} the weakest.")
+                more.append(B(f"Yearly rhythm: **{MON[int(np.argmax(by_m))]}** is usually the strongest month, **{MON[int(np.argmin(by_m))]}** the weakest"))
         hi, lo = int(np.argmax(y)), int(np.argmin(y))
-        more.append(f"The strongest month on record was {_mlabel(series[hi][0])}, at {short(float(y[hi]))}; the weakest was {_mlabel(series[lo][0])}, at {short(float(y[lo]))}.")
+        more.append(B(f"Strongest month: **{_mlabel(series[hi][0])}**, at **{short(float(y[hi]))}**"))
+        more.append(B(f"Weakest month: **{_mlabel(series[lo][0])}**, at **{short(float(y[lo]))}**"))
         if n > 12:
             mv = _move(float(y[-1]), float(y[-13]), lower_better, unit)
             if mv:
-                more.append(f"The latest month, {_mlabel(series[-1][0])}, closed at {short(float(y[-1]))}, {mv} the same month a year earlier.")
+                more.append(B(f"Latest month, **{_mlabel(series[-1][0])}**: **{short(float(y[-1]))}**, {mv} the same month a year earlier", None if mv == "level with" else float(y[-1]) > float(y[-13])))
         TIME = [("line", "Line"), ("bars", "Bars")]
         kind = _chart_choice(spec, "when", TIME)
         trows = [[_mlabel(m), v, (round(_pct(v, series[i - 12][1]), 1) if i >= 12 and series[i - 12][1] else None)] for i, (m, v) in enumerate(series)]
-        cards.append({"key": "when", "word": "When", "ask": "When did it happen?", "sentence": s, "more": more, "mood": _mood(yearly, lower_better, 3),
+        cards.append({"key": "when", "word": "When", "ask": "When did it happen?", "sentence": s, "parts": when_parts, "more": more, "mood": _mood(yearly, lower_better, 3),
+                      "hero": {"big": short(float(y[-1])), "small": f"in {_mlabel(series[-1][0])}, the latest month"},
                       "dims": dates, "dim": date, "dim_word": "Date used",
                       "chart_types": [{"key": k, "label": l} for k, l in TIME], "chart_type": kind,
-                      "chart": {"type": "line" if kind == "line" else "bar", "labels": [_mlabel(m) for m, _ in series], "series": [{"name": label, "data": [v for _, v in series]}], "x_title": "", "y_title": label, "time": True},
-                      "table": {"columns": ["Month", label, "Change on a year earlier (%)"], "rows": trows[::-1]},
+                      "chart": {"type": "line" if kind == "line" else "bar", "labels": [_mlabel(m) for m, _ in series], "series": [{"name": label, "data": [v for _, v in series]}], "x_title": "", "y_title": label, "time": True, "highlight_last": True},
+                      "table": {"columns": ["Month", label, "vs a year earlier"], "rows": trows[::-1], "meta": {"pct": [2], "up_good": not lower_better}},
                       "steps": [start] + notes + [f"Worked out {label} for every month using {date}.", "Fitted a straight line through the months to measure the direction.",
                                                   "Compared the same calendar months across years to look for a yearly rhythm."], "sql": run.sql.get("when")})
 
@@ -542,27 +577,35 @@ def build(spec):
             tag = lambda r: f"{plain(r['name'])} ({_signed(r['diff'])})"
             lead = P["same"][:1] + [r for r in P["same"][1:2] if abs(r["diff"]) >= 0.25 * abs(P["same"][0]["diff"])]
             opp = P["against"][0] if P["against"] else None
+            why_parts = None
             if sign:
                 s = f"{label} {'rose' if sign > 0 else 'fell'} by {short(abs(delta))} on {prev_label}, led by {_join(tag(r) for r in lead)}"
-                s += f", partly offset by {tag(opp)}." if opp and abs(opp["diff"]) >= 0.1 * abs(delta) else "."
+                tail = f", partly offset by {tag(opp)}." if opp and abs(opp["diff"]) >= 0.1 * abs(delta) else "."
+                s += tail
+                why_parts = [label, {"chip": f"{short(abs(delta))} on {prev_label}", "dir": "up" if sign > 0 else "down", "mood": moodof(sign > 0)},
+                             f", led by {_join(tag(r) for r in lead)}{tail}"]
             else:
                 s = f"{label} was level with {prev_label}: gains in {tag(P['same'][0])} were offset by {tag(opp)}."
             ups, downs = sum(1 for r in P["rows"] if r["diff"] > 0), sum(1 for r in P["rows"] if r["diff"] < 0)
-            more = [f"Of {len(P['rows']):,} {dim} groups, {ups or 'none'} rose and {downs or 'none'} fell."]
+            more = [B(f"Of {len(P['rows']):,} {dim} groups, **{ups or 'none'}** rose and **{downs or 'none'}** fell")]
             for d in [d for d in per if d != dim][:2]:
-                more.append(f"By {d}, the largest contribution was {tag(per[d]['same'][0])}.")
+                top_d = per[d]["same"][0]
+                more.append(B(f"By {d}, the largest contribution: **{tag(top_d)}**", top_d["diff"] > 0))
             WHY = [("change", "The change"), ("before", "Before and after")]
             kind = _chart_choice(spec, "why", WHY)
             big = sorted(sorted(P["rows"], key=lambda r: -abs(r["diff"]))[:8], key=lambda r: -r["diff"])
             if kind == "change":
-                chart = {"type": "hbar", "labels": [r["name"] for r in big], "series": [{"name": f"Change on {prev_label}", "data": [r["diff"] for r in big]}], "x_title": dim, "y_title": f"Change in {label}", "signed": True}
+                chart = {"type": "hbar", "labels": [r["name"] for r in big], "series": [{"name": f"Change on {prev_label}", "data": [r["diff"] for r in big]}], "x_title": dim, "y_title": f"Change in {label}",
+                         "signed": True, "up_good": not lower_better, "values": True}
             else:
                 chart = {"type": "hbar", "labels": [r["name"] for r in big], "series": [{"name": prev_label, "data": [r["before"] for r in big]}, {"name": plabel, "data": [r["now"] for r in big]}], "x_title": dim, "y_title": label}
-            why_card = {"key": "why", "word": "Why", "ask": "Why did it change?", "sentence": s, "more": more, "dims": list(per), "dim": dim,
+            why_card = {"key": "why", "word": "Why", "ask": "Why did it change?", "sentence": s, "parts": why_parts, "more": more, "dims": list(per), "dim": dim,
+                        "hero": {"big": _signed(delta) if unit != "%" else f"{delta:+.1f} pts", "small": f"vs {prev_label}", "dir": "up" if delta > 0 else "down" if delta < 0 else "flat", "mood": moodof(delta > 0) if delta else "neutral"},
                         "mood": _mood(_pct(now, pv), lower_better, 0.5),
                         "chart_types": [{"key": k, "label": l} for k, l in WHY], "chart_type": kind, "chart": chart,
-                        "table": {"columns": [dim, prev_label, plabel, "Change", "Share of the change (%)"],
-                                  "rows": [[r["name"], r["before"], r["now"], r["diff"], round(100.0 * r["diff"] / delta, 1) if sign else None] for r in P["rows"][:200]]},
+                        "table": {"columns": [dim, prev_label, plabel, "Change"],
+                                  "rows": [[r["name"], r["before"], r["now"], r["diff"]] for r in P["rows"][:200]],
+                                  "meta": {"abs": [3], "up_good": not lower_better}},
                         "note": "This shows where the figures moved. Your files do not record the reasons behind the movement, so none are given.",
                         "steps": [start] + notes + [f"Worked out {label} for each {dim} in {plabel} and in {prev_label}.",
                                                     "Subtracted one from the other. The differences add up to the overall change.",
@@ -627,6 +670,10 @@ def build(spec):
                            + (["Forecast the next 3 months and reported how accurate that method was on past months."] if fc else []), "sql": None})
 
     title = f"{label}, {plabel}" + (f", {' and '.join(fwords)}" if fwords else "")
+    files = ", ".join(dict.fromkeys(d["source"] for d in store.DATASETS.values() if d["kind"] == "table"))
+    for c in cards:
+        c["bullets"] = [b if isinstance(b, dict) else {"t": b, "dir": None, "mood": None} for b in c.get("more", [])]
+        c["more"] = [b["t"].replace("**", "") + ("" if b["t"].endswith((".", "?", "!")) else ".") for b in c["bullets"]]
     lines = [title, ""]
     for c in cards:
         if c["key"] == "how":
@@ -634,7 +681,6 @@ def build(spec):
             lines += [f"  {i}. {a['do']} {a['why']}" for i, a in enumerate(actions, 1)]
         else:
             lines.append(f"{c['word'].upper()}: {c['sentence']} {' '.join(c['more'])}".strip())
-    files = ", ".join(dict.fromkeys(d["source"] for d in store.DATASETS.values() if d["kind"] == "table"))
     lines += ["", f"Source: {files}. Worked out from the uploaded files only."]
     for c in cards:
         c.setdefault("mood", "neutral")      # Who, Which and How describe; they do not judge

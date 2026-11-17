@@ -60,7 +60,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-18.3");
+const worker = new Worker("assets/worker.js?v=2026-11-18.4");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -1319,6 +1319,60 @@ function saveBriefing(st) {
 }
 function forgetBriefing() { try { localStorage.removeItem(BRIEF_KEY); } catch {} }
 
+// ---- reading at a glance: arrows by meaning (for cost-like numbers a rise is red), bold key words, short tables
+const ARROW = { up: "▲", down: "▼", flat: "▸" };
+const arrow = (dir, mood) => (dir ? h("span", { class: `arr ${mood || "neutral"}`, "aria-hidden": "true" }, ARROW[dir]) : null);
+function rich(text) {               // **bold** -> <strong>
+  return String(text).split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? h("strong", {}, part) : part));
+}
+function changeChip(c) {
+  const words = c.dir === "up" ? "up" : c.dir === "down" ? "down" : "";
+  return h("span", { class: `chip ${c.mood || "neutral"}`, title: c.mood === "good" ? "Good news" : c.mood === "bad" ? "Needs attention" : "" },
+    h("span", { "aria-hidden": "true" }, ARROW[c.dir] || ""), h("span", { class: "sr" }, words + " "), c.chip);
+}
+function sentenceNodes(c) {
+  if (!c.parts) return c.sentence;
+  const out = [];
+  c.parts.forEach((p, i) => {
+    if (typeof p === "string") out.push((i && !/^[,.;:]/.test(p) ? " " : "") + p);
+    else out.push(" ", changeChip(p));
+  });
+  const last = c.parts[c.parts.length - 1];
+  if (typeof last !== "string" || !/[.!?]$/.test(last)) out.push(".");
+  return out;
+}
+function heroFigure(x) {
+  return h("div", { class: "hero-fig" }, h("span", { class: `big ${x.mood || ""}` }, x.dir && x.dir !== "flat" ? h("span", { class: "arr-big", "aria-hidden": "true" }, ARROW[x.dir]) : null, x.big),
+    h("span", { class: "small" }, x.small));
+}
+function storyTable(t) {
+  const m = t.meta || {}, pct = m.pct || [], pts = m.pts || [], abs = m.abs || [], upGood = m.up_good !== false;
+  const isNum = t.columns.map((_, i) => t.rows.some((r) => typeof r[i] === "number"));
+  const cell = (v, i) => {
+    if (v === null || v === undefined || v === "") return h("td", { class: "blank" + (isNum[i] ? " num" : "") }, "–");
+    if (pct.includes(i) || pts.includes(i) || abs.includes(i)) {
+      const dir = v > 0 ? "up" : v < 0 ? "down" : "flat", mood = v === 0 ? "neutral" : (v > 0) === upGood ? "good" : "bad";
+      const text = abs.includes(i) ? (v > 0 ? "+" : "") + fmtNum(v) : `${Math.abs(v).toFixed(Math.abs(v) < 10 ? 1 : 0)}${pts.includes(i) ? " pts" : "%"}`;
+      return h("td", { class: `num chg ${mood}` }, h("span", { "aria-hidden": "true" }, ARROW[dir] + " "), text);
+    }
+    if (i === m.share) return h("td", { class: "num share" }, h("span", { class: "bar", style: `width:${Math.max(0, Math.min(100, v))}%` }), h("span", { class: "v" }, fmtNum(v) + "%"));
+    return h("td", { class: isNum[i] ? "num" : "" }, fmtNum(v));
+  };
+  const LIMIT = 5;
+  const body = h("tbody", {});
+  const wrap = h("div", { class: "table-wrap story-table" }, h("table", {},
+    h("thead", {}, h("tr", {}, t.columns.map((c, i) => h("th", { class: isNum[i] ? "num" : "" }, c)))), body));
+  const draw = (all) => {
+    body.replaceChildren(...(all ? t.rows : t.rows.slice(0, LIMIT)).map((r) => h("tr", {}, r.map(cell))));
+    more.hidden = t.rows.length <= LIMIT;
+    more.textContent = all ? "Show fewer" : `Show all ${fmtNum(t.rows.length)}`;
+    more.onclick = () => draw(!all);
+  };
+  const more = h("button", { class: "link show-all" });
+  draw(false);
+  return h("div", { class: "story-table-box" }, wrap, more);
+}
+
 function storyCard(c, n, st, retell, last) {
   const spec = S.story.spec;
   const rail = [];
@@ -1332,15 +1386,16 @@ function storyCard(c, n, st, retell, last) {
   if (rail.length) body.append(h("div", { class: "edge" }, rail));
   const then = last && last.cards[c.key], now = (c.brief || {}).text || c.sentence;
   if (then && then !== now) body.append(h("p", { class: "since" }, h("strong", {}, `Since your last briefing (${fmtDay(last.date)}): `), `then ${then.replace(/\.$/, "")}.`));
-  if (c.more.length) body.append(h("p", { class: "more" }, c.more.join(" ")));
+  if (c.hero) body.append(heroFigure(c.hero));
+  if (c.bullets && c.bullets.length) body.append(h("ul", { class: "bullets" }, c.bullets.map((b) => h("li", { class: b.mood || "" }, arrow(b.dir, b.mood), h("span", {}, rich(b.t))))));
   body.append(noteBox(c, st));
   if (c.actions) body.append(h("ol", { class: "actions" }, c.actions.map((a) => h("li", {}, h("strong", {}, a.do), h("span", {}, a.why)))));
   if (c.note) body.append(h("p", { class: "fine" }, c.note));
   if (c.chart || c.forecast) body.append(h("div", { class: "chart-box", style: `height:${chartHeight(c.forecast ? { type: "forecast" } : c.chart)}px` }, h("canvas", { role: "img", "aria-label": c.forecast ? "Forecast (an estimate)" : c.sentence })));
-  if (c.table) body.append(renderTable(c.table.columns, c.table.rows, null, { dash: true }));
+  if (c.table) body.append(c.table.meta ? storyTable(c.table) : renderTable(c.table.columns, c.table.rows, null, { dash: true }));
   body.append(h("details", { class: "how" }, h("summary", {}, "How I got this"), h("div", { class: "box" }, h("ol", {}, c.steps.map((s) => h("li", {}, s))),
     c.sql ? h("details", { style: "margin-top:12px" }, h("summary", {}, "Technical detail"), h("p", { class: "muted" }, "The main query that was run on your data, for an analyst who wants to verify it."), h("code", {}, c.sql)) : null)));
-  const card = cardShell(c.key, n, c.word, c.sentence, c.ask, () => openCard(S.story.open === c.key ? null : c.key, true), body);
+  const card = cardShell(c.key, n, c.word, sentenceNodes(c), c.ask, () => openCard(S.story.open === c.key ? null : c.key, true), body);
   card.dataset.mood = c.mood || "neutral";
   return card;
 }

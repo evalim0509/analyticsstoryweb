@@ -2,6 +2,43 @@
    a legend whenever there is more than one series, hover to read exact values. */
 const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
 const INK = "#15211d", MUTED = "#5e6b66", GRID = "#e6e9e6";
+const GOOD = "#1e9e5c", BAD = "#d64545", FADED = "#cdd3dd", ACCENT = SERIES[0];
+
+/* Writes each bar's value at its end, so nobody has to read the axis. */
+const valueLabels = {
+  id: "valueLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    if (!opts || !opts.on) return;
+    const { ctx } = chart, horizontal = chart.options.indexAxis === "y";
+    ctx.save();
+    ctx.font = '600 12px "Hanken Grotesk", system-ui, sans-serif';
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      meta.data.forEach((bar, k) => {
+        const v = ds.data[k];
+        if (v === null || v === undefined) return;
+        const text = (opts.signed && v > 0 ? "+" : "") + (opts.unit === "%" ? v.toFixed(1) + "%" : compact.format(v));
+        ctx.fillStyle = opts.colorOf ? opts.colorOf(k, v) : INK;
+        if (horizontal) {
+          const neg = v < 0, width = Math.abs(bar.base - bar.x);
+          ctx.textBaseline = "middle";
+          if (neg && width > ctx.measureText(text).width + 14) {          // inside the bar, so it never covers the names
+            ctx.fillStyle = "#fff"; ctx.textAlign = "left"; ctx.fillText(text, bar.x + 7, bar.y);
+          } else if (neg) {
+            ctx.textAlign = "left"; ctx.fillText(text, bar.base + 6, bar.y);
+          } else {
+            ctx.textAlign = "left"; ctx.fillText(text, bar.x + 6, bar.y);
+          }
+        } else {
+          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillText(text, bar.x, bar.y - 5);
+        }
+      });
+    });
+    ctx.restore();
+  },
+};
 
 Chart.defaults.font.family = '"Hanken Grotesk", system-ui, sans-serif';
 Chart.defaults.font.size = 12.5;
@@ -96,13 +133,31 @@ function drawChart(canvas, spec) {
   if (type === "stacked") { options.scales.x.stacked = true; options.scales.y.stacked = true; }
   if (spec.animate && !calm()) options.animation = GROW;
   if (spec.clear) options.plugins.whiteBackground = false;
+  // Colours point at the answer: rises and falls in green and red by what they mean, the bar the sentence is about
+  // in the main colour and the rest in grey, the latest period picked out.
+  const upGood = spec.up_good !== false;
+  const signColor = (v) => ((v >= 0) === upGood ? GOOD : BAD);
+  const moodColor = spec.mood_last === "good" ? GOOD : spec.mood_last === "bad" ? BAD : ACCENT;
+  const barColor = (s, i) => spec.signed ? s.data.map(signColor)
+    : !many && spec.highlight !== undefined && spec.highlight !== null ? s.data.map((_, k) => (k === spec.highlight ? ACCENT : FADED))
+    : spec.emphasis === "last" || spec.mood_last !== undefined ? s.data.map((_, k) => (k === s.data.length - 1 ? moodColor : FADED))
+    : SERIES[i];
+  const n = spec.labels.length;
   const datasets = series.map((s, i) => line
     ? { label: s.name, data: s.data, borderColor: SERIES[i], backgroundColor: SERIES[i], borderWidth: 2, cubicInterpolationMode: "monotone", spanGaps: true,
-        pointRadius: spec.labels.length > 40 ? 0 : 2.5, pointHoverRadius: 5, pointBackgroundColor: SERIES[i], pointBorderColor: "#fff", pointBorderWidth: 1.5 }
-    : { label: s.name, data: s.data, backgroundColor: spec.signed ? s.data.map((v) => (v < 0 ? SERIES[1] : SERIES[0])) : spec.emphasis === "last" ? s.data.map((_, k) => (k === s.data.length - 1 ? SERIES[0] : "#b9c6dc")) : SERIES[i], borderColor: "#fff", borderWidth: type === "stacked" ? 1 : 0,
+        pointRadius: spec.highlight_last ? s.data.map((_, k) => (k === n - 1 ? 5 : n > 40 ? 0 : 2.5)) : n > 40 ? 0 : 2.5, pointHoverRadius: 5,
+        pointBackgroundColor: spec.highlight_last ? s.data.map((_, k) => (k === n - 1 ? "#fff" : SERIES[i])) : SERIES[i],
+        pointBorderColor: spec.highlight_last ? s.data.map((_, k) => (k === n - 1 ? SERIES[i] : "#fff")) : "#fff", pointBorderWidth: spec.highlight_last ? s.data.map((_, k) => (k === n - 1 ? 2.5 : 1.5)) : 1.5 }
+    : { label: s.name, data: s.data, backgroundColor: barColor(s, i), borderColor: "#fff", borderWidth: type === "stacked" ? 1 : 0,
         borderRadius: type === "stacked" ? 0 : 4, borderSkipped: "start", maxBarThickness: 30, categoryPercentage: 0.75, barPercentage: many ? 0.9 : 0.8 });
+  const labelsOn = !!spec.values && !line && !many && n <= 14;
+  options.plugins.valueLabels = { on: labelsOn, signed: !!spec.signed, unit: spec.unit, colorOf: spec.signed ? (k, v) => signColor(v) : null };
+  if (labelsOn) {                                    // room for the written values
+    if (horizontal) options.layout = { padding: { right: 56, left: spec.signed ? 56 : 0 } };
+    else options.layout = { padding: { top: 22 } };
+  }
   canvas.parentElement.style.height = chartHeight(spec) + "px";
-  return new Chart(canvas, { type: line ? "line" : "bar", data: { labels: spec.labels, datasets }, options, plugins: [whiteBackground] });
+  return new Chart(canvas, { type: line ? "line" : "bar", data: { labels: spec.labels, datasets }, options, plugins: [whiteBackground, valueLabels] });
 }
 
 /* Forecast: past values, the forecast, and the band where the result will probably land. */
