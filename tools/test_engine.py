@@ -102,6 +102,18 @@ assert mo["period_label"] == "Dec 2024", mo["period_label"]
 dup = next(i for i in call("check", dataset=mon["id"])["issues"] if i["kind"] == "duplicates")
 assert dup["confidence"] == "Medium", dup
 
+# --- data catalogue: unusual column names, matched by the owner
+odd = "Booked On,Client Number,Patch,Takings,Pieces\n" + "".join(f"2024-{m:02d}-{d:02d},CN{(m * 7 + d) % 5},{['East', 'West', 'North'][(m + d) % 3]},{100 + m * 3 + d},{1 + d % 4}\n" for m in range(1, 13) for d in (3, 12, 27))
+od = call("confirm", token=call("preview", name="odd.csv", data=odd.encode())["token"])["datasets"][-1]
+start = call("catalogue_start")
+assert {n["key"] for n in start["needs"]} >= {"date", "sales", "customer", "region"}
+call("catalogue_set", roles={"date": "Booked On", "sales": "Takings", "customer": "Client Number", "region": "Patch", "qty": "Pieces"})
+cs = call("story_build", spec={"dataset": od["id"], "value": "Takings"})
+K2 = {c["key"]: c for c in cs["cards"]}
+assert K2["who"]["dim"] == "Client Number" and K2["which"]["dim"] == "Patch" and "Client Number" in K2["who"]["sentence"], (K2["who"]["dim"], K2.get("which", {}).get("dim"))
+assert [x["label"] for x in call("story_options")["options"] if x["dataset"] == od["id"]][0] == "Takings"
+call("catalogue_set", roles={})
+
 # --- accounting export templates (dummy files in each system's standard layout)
 ACC = ROOT / "sample-data" / "accounting"
 want = {"xero_invoices.csv": ("Xero", 40), "quickbooks_sales_by_customer.xlsx": ("QuickBooks", 24), "autocount_sales_listing.xlsx": ("AutoCount", 30),

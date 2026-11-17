@@ -2,7 +2,7 @@
 The page sends a function name and JSON; it gets JSON back."""
 import json, math, traceback
 from . import store, ingest, quality, joins, builder, chat, ml, story
-from . import measures
+from . import measures, catalogue
 
 
 def state():
@@ -126,6 +126,15 @@ def story_tidy():
 
 def story_build(spec):
     return story.build(spec)
+
+
+def catalogue_start():
+    """What Gist needs, every column in the files, and Gist's best guess for each need."""
+    return {"needs": catalogue.needs(), "columns": catalogue.columns(), "guess": catalogue.guess(), "roles": dict(catalogue.ROLES)}
+
+
+def catalogue_set(roles):
+    return {"roles": catalogue.set_roles(roles), "options": story.options()}
 
 
 def story_checks():

@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-18.1",
+  "version": "2026-11-18.2",
   "modules": [
     "__init__",
     "store",
@@ -10,6 +10,7 @@
     "builder",
     "chat",
     "ml",
+    "catalogue",
     "measures",
     "story",
     "api"

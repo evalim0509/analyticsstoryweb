@@ -3,6 +3,12 @@
 "use strict";
 
 // ---------------------------------------------------------------- small helpers
+// Screens are built with optional parts ("show this only if..."). Skip empty parts and flatten lists
+// everywhere, so a missing part never appears on screen as the word "null".
+for (const name of ["replaceChildren", "append"]) {
+  const native = Element.prototype[name];
+  Element.prototype[name] = function (...kids) { return native.apply(this, kids.flat(Infinity).filter((k) => k !== null && k !== undefined && k !== false)); };
+}
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -54,7 +60,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-18.1");
+const worker = new Worker("assets/worker.js?v=2026-11-18.2");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -111,9 +117,9 @@ function show(view) {
   S.view = view;
   $("welcome").hidden = view !== "welcome";
   if (view === "story" && !S.story) view = S.view = "pick";
-  for (const v of ["flow", "pick", "story", "data", "ask", "build", "predict"]) $("view-" + v).hidden = v !== view;
+  for (const v of ["flow", "pick", "story", "data", "catalogues", "ask", "build", "predict"]) $("view-" + v).hidden = v !== view;
   const has = !!S.state;
-  if (["data", "ask", "build", "predict"].includes(view)) S.explore = true;
+  if (["data", "catalogues", "ask", "build", "predict"].includes(view)) S.explore = true;
   $("addBtn").hidden = $("exploreBtn").hidden = !has || view === "flow" || (view === "pick" && S.flow);
   $("tabs").hidden = $("wordsBtn").hidden = !(has && S.explore);
   $("exploreBtn").textContent = S.explore ? "Hide tools" : "Explore further";
@@ -121,6 +127,7 @@ function show(view) {
   if (view === "story") renderStory();
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-current", b.dataset.view === view ? "page" : "false"));
   if (view === "data") renderData();
+  if (view === "catalogues") renderCatalogues();
   if (view === "ask") renderAsk();
   if (view === "build") renderBuild();
   if (view === "predict") renderPredict();
@@ -139,7 +146,7 @@ function parseBrain(md) {
     .filter((c) => c.length >= 2 && c[0] && !/^-+$/.test(c[0].replace(/[:\s]/g, "")) && !/^business word/i.test(c[0]) && !c[0].startsWith("_"))
     .map((c) => ({ term: c[0].replace(/[`*]/g, ""), means: c[1].replace(/[`*]/g, ""), note: c[2] || "" }));
 }
-function sendGlossary() { if (engineReady) call("set_glossary", { entries: [...brainWords, ...localWords()] }); }
+function sendGlossary() { if (engineReady) call("set_glossary", { entries: [...brainWords, ...localWords(), ...(typeof catalogueWords === "function" ? catalogueWords() : [])] }); }
 fetch("SECOND_BRAIN.md", { cache: "no-cache" }).then((r) => (r.ok ? r.text() : "")).then((t) => { brainWords = parseBrain(t); sendGlossary(); }).catch(() => {});
 
 function openWords(prefill) {
@@ -153,7 +160,8 @@ function openWords(prefill) {
       mine.length || brainWords.length ? null : h("p", { class: "muted" }, "No business words yet."),
       renderTable(["When I say", "It means", "Where it is kept"], [
         ...brainWords.map((w) => [w.term, w.means, "Project notes (SECOND_BRAIN.md)"]),
-        ...mine.map((w) => [w.term, w.means, "This browser"])], ["text", "text", "text"]),
+        ...mine.map((w) => [w.term, w.means, "This browser"]),
+        ...catalogueWords().map((w) => [w.term, w.means, "Data catalogue (matched fields)"])], ["text", "text", "text"]),
       mine.length ? h("button", { class: "link", onclick: () => { localStorage.removeItem("gist.words"); localStorage.removeItem("plainly.words"); sendGlossary(); draw(); } }, "Clear the words kept in this browser") : null);
   };
   draw();
@@ -211,22 +219,141 @@ const orbEl = (size) => h("span", { class: "orb " + (size || ""), "aria-hidden":
 document.querySelectorAll("[data-orb]").forEach((el) => el.replaceWith(orbEl(el.dataset.orb)));
 const aura = () => h("span", { class: "aura", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("b"), h("b"));
 // The progress bar: each part is a button that takes you back (or forward) to that step once your data is in.
-const STEP_NAMES = ["Your files", "Tidy", "Quick checks", "Choose what to understand"];
+const STEP_NAMES = ["Your files", "Match your fields", "Tidy", "Quick checks", "Choose what to understand"];
 function stepper(n) {
   const back = n === 1 ? leaveFlow : () => goStep(n - 1);
   return h("nav", { class: "stepper", "aria-label": "Steps" },
     h("button", { class: "back small-back", title: n === 1 ? "Back" : `Back to step ${n - 1}`, onclick: back }, h("span", { "aria-hidden": "true" }, "←"), " Back"),
-    h("span", {}, `Step ${n} of 4`),
-    h("span", { class: "bars" }, [1, 2, 3, 4].map((i) => h("button", {
+    h("span", {}, `Step ${n} of 5`),
+    h("span", { class: "bars" }, [1, 2, 3, 4, 5].map((i) => h("button", {
       class: (i <= n ? "on" : "") + (i === n ? " cur" : ""), title: STEP_NAMES[i - 1], "aria-label": `Step ${i}: ${STEP_NAMES[i - 1]}`,
       "aria-current": i === n ? "step" : null, disabled: i !== n && (!S.state || (S.pending && i > 1)) ? true : null,
       onclick: () => { if (i !== n) goStep(i); } }, h("i")))));
 }
+// ---- data catalogues: "what Gist needs" matched to "what you have", saved by name in this browser (names only, never data)
+const CAT_KEY = "gist.catalogues";
+const catalogues = () => { try { return JSON.parse(localStorage.getItem(CAT_KEY) || "[]"); } catch { return []; } };
+const saveCatalogues = (list) => { try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {} };
+S.roles = {}; S.custom = []; S.catalogue = null;
+function catalogueWords() {
+  const words = { date: "date", sales: "sales", qty: "quantity", cost: "cost", customer: "customer", product: "product", order: "order", region: "region", rep: "salesperson", target: "target" };
+  return [...Object.entries(S.roles).filter(([k, v]) => v && words[k]).map(([k, v]) => ({ term: words[k], means: v, from: "catalogue" })),
+          ...S.custom.filter((c) => c.label && c.column).map((c) => ({ term: c.label, means: c.column, from: "catalogue" }))];
+}
+function bestCatalogue(columnNames) {
+  const have = new Set(columnNames);
+  let best = null, score = 0;
+  for (const c of catalogues()) {
+    const n = Object.values(c.fields || {}).filter((v) => have.has(v)).length + (c.custom || []).filter((x) => have.has(x.column)).length;
+    if (n > score) { best = c; score = n; }
+  }
+  return best;
+}
+function downloadCatalogue(c) {
+  download(`${c.name}.gist-catalogue.json`, new Blob([JSON.stringify({ gist_catalogue: 1, name: c.name, fields: c.fields, custom: c.custom || [] }, null, 2)], { type: "application/json" }));
+}
+function loadCatalogueFile(done) {
+  const input = h("input", { type: "file", accept: ".json,application/json", hidden: true });
+  input.addEventListener("change", async () => {
+    try {
+      const o = JSON.parse(await input.files[0].text());
+      if (!o || !o.gist_catalogue || !o.name || typeof o.fields !== "object") throw new Error("not a Gist catalogue");
+      const list = catalogues().filter((c) => c.name !== o.name);
+      list.push({ id: "c" + Date.now(), name: String(o.name).slice(0, 60), fields: o.fields, custom: Array.isArray(o.custom) ? o.custom : [] });
+      saveCatalogues(list); toast(`Loaded the “${o.name}” catalogue.`); done && done();
+    } catch (err) { toast("That file is not a Gist catalogue."); }
+    input.remove();
+  });
+  document.body.append(input); input.click();
+}
+
+// Step 2: what Gist needs, matched to what your files call it. Starts from the best saved catalogue, or Gist's guesses.
+async function stepMatch(review) {
+  busy("Reading your column names…");
+  const r = await call("catalogue_start");
+  const names = r.columns.map((c) => c.name);
+  const picked = (review && S.catalogue && catalogues().find((c) => c.id === S.catalogue)) || bestCatalogue(names);
+  const fill = (cat) => {
+    const f = {};
+    for (const n of r.needs) {
+      const v = cat ? (cat.fields || {})[n.key] : (review && Object.keys(S.roles).length ? S.roles[n.key] : r.guess[n.key]);
+      f[n.key] = v && names.includes(v) ? v : "";
+    }
+    return f;
+  };
+  let current = picked, fields = fill(picked), custom = (picked ? picked.custom || [] : S.custom).map((c) => ({ ...c }));
+  const tablesOf = [...new Set(r.columns.map((c) => c.table))];
+  const columnSelect = (value, onChange, label) => {
+    const sel = h("select", { class: "match-select", "aria-label": label, onchange: (e) => onChange(e.target.value) },
+      h("option", { value: "" }, "— not in my files —"),
+      tablesOf.map((t) => h("optgroup", { label: t }, r.columns.filter((c) => c.table === t).map((c) => h("option", { value: c.name, selected: c.name === value }, c.name)))));
+    sel.classList.toggle("empty", !value);
+    sel.addEventListener("change", () => sel.classList.toggle("empty", !sel.value));
+    return sel;
+  };
+  const list = h("div", { class: "match-list" });
+  const drawList = () => list.replaceChildren(...[
+    h("div", { class: "match-head" }, h("span", {}, "What Gist needs"), h("span", {}, "What you have")),
+    r.needs.map((n) => h("div", { class: "match-row" },
+      h("div", { class: "match-need" }, h("b", {}, n.label), h("span", {}, n.hint)),
+      columnSelect(fields[n.key], (v) => (fields[n.key] = v), n.label))),
+    custom.map((c, i) => h("div", { class: "match-row custom" },
+      h("div", { class: "match-need" }, h("input", { type: "text", value: c.label || "", placeholder: "Your field, e.g. Project code", "aria-label": "Field name", oninput: (e) => (c.label = e.target.value) }),
+        h("button", { class: "link", onclick: () => { custom.splice(i, 1); drawList(); } }, "Remove")),
+      columnSelect(c.column, (v) => (c.column = v), c.label || "Your field"))),
+    h("button", { class: "link add-field", onclick: () => { custom.push({ label: "", column: "" }); drawList(); } }, "+ Add a field")].flat());
+  drawList();
+  const chooser = h("select", { class: "cat-choose", "aria-label": "Catalogue", onchange: (e) => {
+    current = catalogues().find((c) => c.id === e.target.value) || null;
+    fields = fill(current); custom = (current ? current.custom || [] : []).map((c) => ({ ...c })); drawList(); drawSave();
+  } }, h("option", { value: "" }, "Gist's guesses"), catalogues().map((c) => h("option", { value: c.id, selected: current && c.id === current.id }, c.name)));
+  const saveBox = h("div", { class: "cat-save" });
+  const drawSave = (asking) => {
+    if (asking) {
+      const name = h("input", { type: "text", placeholder: "Name it, e.g. Accounting", "aria-label": "Catalogue name", value: asking === "new" ? "" : (current || {}).name || "" });
+      const ok = () => {
+        const nm = name.value.trim(); if (!nm) { name.focus(); return; }
+        const all = catalogues();
+        const keep = { id: (asking === "update" && current) ? current.id : "c" + Date.now(), name: nm, fields: { ...fields }, custom: custom.filter((c) => c.label && c.column) };
+        saveCatalogues([...all.filter((c) => c.id !== keep.id && c.name !== nm), keep]);
+        current = keep; chooser.append(h("option", { value: keep.id }, nm)); chooser.value = keep.id;
+        toast(`Saved as “${nm}”. Gist will use it whenever these column names appear.`); drawSave();
+      };
+      name.addEventListener("keydown", (e) => { if (e.key === "Enter") ok(); });
+      saveBox.replaceChildren(name, h("button", { class: "secondary", onclick: ok }, "Save"), h("button", { class: "link", onclick: () => drawSave() }, "Cancel"));
+      setTimeout(() => name.focus(), 30);
+    } else {
+      saveBox.replaceChildren(...[
+        current ? h("button", { class: "secondary", onclick: () => drawSave("update") }, `Save changes to “${current.name}”`) : null,
+        h("button", { class: current ? "link" : "secondary", onclick: () => drawSave("new") }, current ? "Save as a new catalogue" : "Save as a catalogue")].filter(Boolean));
+    }
+  };
+  drawSave();
+  const go = h("button", { class: "primary big", onclick: async () => {
+    go.disabled = true;
+    S.roles = { ...fields }; S.custom = custom.filter((c) => c.label && c.column); S.catalogue = current ? current.id : null;
+    const res = await call("catalogue_set", { roles: S.roles });
+    S.pick = { ...(S.pick || {}), options: res.options };
+    sendGlossary();
+    stepTidy();
+  } }, "Looks right, continue");
+  const found = Object.values(fields).filter(Boolean).length;
+  flowPage(2,
+    h("h1", { class: "ask-big" }, "Match your fields"),
+    h("p", { class: "frame" }, picked ? `I used your “${picked.name}” catalogue. ` : `I matched ${found} of ${r.needs.length} from your column names. `, "Change anything that is wrong; leave what you don't have."),
+    h("div", { class: "cat-bar" }, h("label", {}, "Using ", chooser)),
+    list,
+    h("div", { class: "flow-actions" }, go, saveBox),
+    h("details", { class: "flow-more" }, h("summary", {}, "What is this?"),
+      h("p", { class: "muted" }, "Every system names things differently: one says Customer ID, another Client Number or Debtor Code. Matching tells Gist which column is which, so the cards use the right fields. The story keeps your own column names. Save it as a catalogue (for example “Accounting”) and Gist will fill this in for you next time. Catalogues hold column names only, never your data.")));
+}
+
 function goStep(i) {
   S.pending = false;
   if (i === 1) reviewFiles();
-  else if (i === 2) stepTidy(true);
-  else if (i === 3) stepChecks();
+  else if (i === 2) stepMatch(true);
+  else if (i === 3) stepTidy(true);
+  else if (i === 4) stepChecks();
   else show("pick");
 }
 
@@ -264,7 +391,7 @@ async function stepChecks() {
     if (S.story) S.story.fresh = true;
     show("pick");
   } }, "Looks right, continue");
-  flowPage(3,
+  flowPage(4,
     h("h1", { class: "ask-big" }, "Three quick checks"),
     h("p", { class: "frame" }, "I have picked my best guess for each. Change anything that is wrong, then continue."),
     blocks,
@@ -276,7 +403,7 @@ function reviewFiles() {
   flowPage(1,
     h("h1", { class: "ask-big" }, tables.length ? `You added ${plural(tables.length, "table")}.` : "You added text, but no tables of numbers."),
     h("p", { class: "frame" }, "Check this is what you expected, then continue."),
-    h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepTidy(true) }, "Continue"),
+    h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepMatch(true) }, "Continue"),
       h("button", { class: "link", onclick: () => fileInput.click() }, "Add more files")),
     h("details", { class: "flow-more" }, h("summary", {}, "Show details"),
       h("ul", {}, tables.map((d) => h("li", {}, h("strong", {}, d.name), ` — ${plural(d.rows, "row")}, ${plural(d.columns.length, "field")}, from ${d.source}`)),
@@ -372,7 +499,7 @@ function showPreview(previews) {
     S.current = (st.datasets.find((d) => d.health && d.health.to_review) || st.datasets[0] || {}).id || null;
     S.story = null; S.pick = null;
     if (!st.datasets.length) { S.flow = false; show("ask"); return; }
-    stepTidy();
+    stepMatch();
   });
   const tpls = [...new Set(previews.flatMap((p) => (p.tables || []).map((t) => t.template).filter(Boolean)))];
   const say = tables ? `I found ${plural(tables, "table")} in your ${files === 1 ? "file" : "files"}.`
@@ -395,7 +522,7 @@ async function stepTidy(review) {
   const t = o.tidy, n = t.fixes + t.links;
   if (!n && !review) { stepChecks(); return; }
   if (!n) {
-    flowPage(2,
+    flowPage(3,
       h("h1", { class: "ask-big" }, "Everything is tidy."),
       h("p", { class: "frame" }, t.to_review ? `${plural(t.to_review, "item")} still need${t.to_review === 1 ? "s" : ""} a person's judgement, such as unusually large values. They are not changed.` : "There is nothing left to fix."),
       h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepChecks() }, "Continue"),
@@ -409,7 +536,7 @@ async function stepTidy(review) {
     toast(`${plural(r.done.length, "fix", "fixes")} applied.`);
     stepChecks();
   } }, "Fix them all");
-  flowPage(2,
+  flowPage(3,
     h("h1", { class: "ask-big" }, `I found ${plural(n, "thing")} to tidy.`),
     h("p", { class: "frame" }, "Tidying makes the story more accurate. Your original files are not changed."),
     h("div", { class: "flow-actions" }, fix, h("button", { class: "link", onclick: () => stepChecks() }, "Skip for now")),
@@ -560,6 +687,33 @@ function openMeasureMaker(dsId, m, done) {
     h("div", { class: "body stack" }, h("label", { class: "stack" }, "Name", name), h("div", { class: "row" }, "Total", a, op, b)),
     h("footer", {}, h("button", { class: "secondary", onclick: closeModal }, "Cancel"), h("button", { class: "primary", onclick: save }, "Save measure"))));
   name.focus();
+}
+
+// ---------------------------------------------------------------- Catalogues: view, rename, download, load and delete
+function renderCatalogues() {
+  const root = $("view-catalogues");
+  const list = catalogues();
+  const NEED_LABELS = { date: "Date", sales: "Sales amount", qty: "Quantity", cost: "Cost", customer: "Customer", product: "Product", order: "Order or invoice number", region: "Region or branch", rep: "Salesperson", target: "Target or budget" };
+  const card = (c) => {
+    const pairs = [...Object.entries(c.fields || {}).filter(([, v]) => v).map(([k, v]) => [NEED_LABELS[k] || k, v]), ...(c.custom || []).map((x) => [x.label, x.column])];
+    const title = h("h3", {}, c.name);
+    return h("div", { class: "card pad cat-card" },
+      h("div", { class: "row" }, title, h("span", { class: "grow" }),
+        h("button", { class: "secondary small", onclick: () => {
+          const nm = prompt("New name for this catalogue", c.name); if (!nm || !nm.trim()) return;
+          saveCatalogues(catalogues().map((x) => (x.id === c.id ? { ...x, name: nm.trim().slice(0, 60) } : x))); renderCatalogues();
+        } }, "Rename"),
+        h("button", { class: "secondary small", onclick: () => downloadCatalogue(c) }, "Download"),
+        h("button", { class: "secondary small", onclick: () => { if (confirm(`Delete the “${c.name}” catalogue? This cannot be undone.`)) { saveCatalogues(catalogues().filter((x) => x.id !== c.id)); renderCatalogues(); } } }, "Delete")),
+      pairs.length ? renderTable(["What Gist needs", "What you have"], pairs, ["text", "text"]) : h("p", { class: "muted" }, "Nothing matched yet."));
+  };
+  root.replaceChildren(
+    h("h2", {}, "Data catalogues"),
+    h("p", { class: "sub" }, "Each catalogue remembers what your columns are called in one system or format. Gist picks the right one automatically when you add files. Column names only; your data is never saved."),
+    h("div", { class: "row", style: "margin:16px 0 20px" },
+      S.state ? h("button", { class: "primary", onclick: () => stepMatch(true) }, "Match the fields in my current files") : null,
+      h("button", { class: "secondary", onclick: () => loadCatalogueFile(renderCatalogues) }, "Load a catalogue file")),
+    list.length ? h("div", { class: "stack" }, list.map(card)) : h("div", { class: "card placeholder" }, h("b", {}, "No catalogues yet"), "When you match your fields after adding files, press “Save as a catalogue” and name it, for example “Accounting”."));
 }
 
 // ---------------------------------------------------------------- Ask
@@ -926,7 +1080,7 @@ async function renderPick() {
     return card;
   }));
   root.replaceChildren(h("div", { class: "flow arrive" },
-    stepper(4),
+    stepper(5),
     h("h1", { class: "ask-big" }, "What do you want to understand?"),
     h("p", { class: "frame" }, options.length ? "Pick one. You can change it at any time." : "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further.")),
     options.length ? wrap : null);

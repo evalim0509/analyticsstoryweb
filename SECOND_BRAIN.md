@@ -279,6 +279,24 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   RM 1,234 read correctly, and Debit/Credit combined into Net amount. Step 1
   says which system was recognised. Built from standard layouts; to be checked
   against real exports.
+- R86. The "A look at ..." line is the headline of the story page: the choices
+  in large dark serif type with a blue underline. The reconciliation line under
+  it is small and pale.
+- R87. Data catalogues. After files are read, a "Match your fields" step (steps
+  are now 1 Files, 2 Match your fields, 3 Tidy, 4 Quick checks, 5 Choose) lists
+  what Gist needs beside a "What you have" choice of columns from every table:
+  Date, Sales amount, Quantity, Cost, Customer, Product, Order or invoice number,
+  Region or branch, Salesperson, Target or budget, plus "+ Add a field" for the
+  owner's own (for example Project code). It starts from the saved catalogue
+  that fits the column names best, otherwise from Gist's guesses.
+- R88. A match can be saved as a named catalogue (for example "Accounting"), and
+  there can be many, one per system or naming convention. Catalogues are kept in
+  this browser (column names only, never data) and can be downloaded as a small
+  file for a colleague to load. A "Catalogues" tab under Explore further lists
+  them with Rename, Download, Delete and "Load a catalogue file".
+- R89. Matched fields tell Gist which column is which (date, sales, cost,
+  customer and so on); stories keep the owner's own column names. Matches also
+  teach the Ask feature those words (shown in Business words as "Data catalogue").
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -323,6 +341,8 @@ that matter, who uses the output.
 | 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
 | 2026-11-17 | The Dribbble orb reference could not be read from the build environment (the site blocks automated visits), so the orb was matched to a screenshot the owner uploaded. | Owner's choice to share the image. |
 | 2026-11-17 | The chart in an open card is drawn about 0.4 seconds into the opening, and its space is reserved in advance. | Drawing during the first frames made the opening stutter, and late sizing made it jump. |
+| 2026-11-18 | When guessing the sales field, line-level amounts (Line Amount, Row Total, Sales Amount) are preferred. | In Xero exports the invoice Total repeats on every line, so adding it up would overcount. |
+| 2026-11-18 | Catalogues match by column name only, across all tables at once. | Simplest to fill in; the table name is shown beside each column. |
 | 2026-11-18 | Briefing figures (not data) are kept in the browser's local storage after sharing, for "since your last briefing". | Owner's choice; the recorded "data in memory only" rule still holds for rows and files. |
 | 2026-11-18 | PDF and PowerPoint makers (jsPDF 2.5.2, PptxGenJS 3.12.0, both MIT) are stored in assets/vendor and loaded only when exporting. | No new network host; nothing leaves the browser. |
 | 2026-11-18 | The PDF uses standard fonts, which cover Western European text only. Names in other scripts (for example Chinese) may not print correctly in the PDF; the slides and email are not affected. | Keeps the PDF maker small. Can be revisited if needed. |
@@ -352,6 +372,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-18 | Data catalogues: Match your fields step, saved named catalogues (download and load), Catalogues tab, matched fields used by the engine and taught to Ask. "A look at" line made the headline; reconciliation made small. Fixed stray "null" text on some screens. |
 | 2026-11-18 | Quick checks step; reconciliation line; calendar month-end; averages for rates; ID-based duplicate removal; since-last-briefing figures; PDF, slides, email draft and copy-for-email export; derived measures and Make a measure; preparer's notes; accounting export templates (Xero, QuickBooks, AutoCount, SQL Account, SAP B1, Sage, MYOB) with dummy samples. Fixed: the header buttons (Explore further, Add files, Business words) had been pushed off screen by the scroll-planning copy's class name. |
 | 2026-11-17 | First-page wave band narrowed on phones; step 3 "preparing your story" screen shortened to about 2 seconds. |
 | 2026-11-17 | First-page background waves now run as a band down the middle of the whole page. |

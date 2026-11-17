@@ -6,6 +6,7 @@ value). Every measure carries the plain-English formula shown in "How I got this
 Also here: whether the last month is complete, and the reconciliation from file to story."""
 import calendar, re
 from . import store
+from . import catalogue as CAT
 from .store import q, rows, scalar
 
 MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -27,6 +28,10 @@ def kind_of(base, col):
     k = SETTINGS["kinds"].get(f"{base['id']}|{col}")
     if k:
         return k, False
+    if col in (CAT.role("sales"), CAT.role("cost"), CAT.role("target")):
+        return "money", True
+    if col == CAT.role("qty"):
+        return "count", True
     if RATE_NAME.search(col):
         return "rate", True
     return ("count" if QTY.search(col) or re.search(r"count|number|tickets|visits|orders", col, re.I) else "money"), True
@@ -34,7 +39,7 @@ def kind_of(base, col):
 
 def chosen_date(base):
     dates = [c["name"] for c in base["columns"] if c["type"] == "date"]
-    d = SETTINGS["date"].get(base["id"])
+    d = SETTINGS["date"].get(base["id"]) or CAT.role("date", base)
     return d if d in dates else (dates[0] if dates else None)
 
 
@@ -52,13 +57,14 @@ def _num(ds, pattern, exclude=None):
 def suggested(ds):
     """Derived measures offered automatically when the fields exist."""
     out = []
-    sales = _num(ds, SALES, re.compile(r"cost|price|unit|discount|%", re.I))
-    qty = _num(ds, QTY)
-    cost, cost_expr, cost_words = _num(ds, COST_TOTAL, re.compile(r"unit|per|price", re.I)), None, None
+    sales = CAT.role("sales", ds) or _num(ds, SALES, re.compile(r"cost|price|unit|discount|%", re.I))
+    qty = CAT.role("qty", ds) or _num(ds, QTY)
+    mc = CAT.role("cost", ds)
+    cost, cost_expr, cost_words = (mc if mc and not UNIT_COST.search(mc) else None) or (None if mc else _num(ds, COST_TOTAL, re.compile(r"unit|per|price", re.I))), None, None
     if cost:
         cost_expr, cost_words = q(cost), cost
     else:
-        uc = _num(ds, UNIT_COST)
+        uc = mc if mc and UNIT_COST.search(mc) else _num(ds, UNIT_COST)
         if uc and qty:
             cost_expr, cost_words = f"({q(qty)} * {q(uc)})", f"{qty} × {uc}"
     if sales and cost_expr:
@@ -66,7 +72,7 @@ def suggested(ds):
                     "formula": f"Margin = total {sales} minus total cost ({cost_words}).", "detail": f"{sales} minus cost"})
         out.append({"value": "calc:margin_pct", "label": "Margin %", "op": "margin_pct", "a": q(sales), "b": cost_expr,
                     "formula": f"Margin % = ({sales} minus cost ({cost_words})) ÷ {sales} × 100.", "detail": f"Margin as a share of {sales}"})
-    oid = next((c["name"] for c in ds["columns"] if c["role"] == "id" and ORDER_ID.search(c["name"])), None)
+    oid = CAT.role("order", ds) or next((c["name"] for c in ds["columns"] if c["role"] == "id" and ORDER_ID.search(c["name"])), None)
     if sales and oid:
         out.append({"value": "calc:aov", "label": "Average order value", "op": "per_id", "a": q(sales), "b": q(oid),
                     "formula": f"Average order value = total {sales} ÷ number of different {oid}s.", "detail": f"{sales} per {oid}"})
@@ -129,7 +135,7 @@ def listing(ds, base):
         if c["role"] != "measure" or c["type"] != "number":
             continue
         (rates if kind_of(base, c["name"])[0] == "rate" else totals).append(c["name"])
-    order = lambda n: next((i for i, w in enumerate(LEAD) if w in n.lower()), 99)
+    order = lambda n: -1 if n == CAT.role("sales") else next((i for i, w in enumerate(LEAD) if w in n.lower()), 99)
     totals.sort(key=order)
     out = [{"value": m, "label": m, "detail": f"Total {m}, from {base['name']}"} for m in totals]
     out += [{"value": d["value"], "label": d["label"], "detail": d["detail"] + f", from {base['name']}"} for d in derived(ds)]

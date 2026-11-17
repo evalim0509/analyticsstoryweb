@@ -6,6 +6,7 @@ import re
 import numpy as np
 from . import store, builder, quality, joins, ml
 from . import measures as MS
+from . import catalogue as CAT
 from .store import q, rows, scalar, fmt
 
 MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -183,9 +184,21 @@ def _dims(ds, base):
             continue
         is_who = WHO.search(n) and not re.search(r"product|item|sku|categor", n, re.I)
         (who if is_who else which).append(c)
-    who.sort(key=lambda c: (c["distinct"] > 15, c["distinct"]))
+    pinned_who = [CAT.role(k, ds) for k in ("customer", "rep")]
+    pinned_which = [CAT.role(k, ds) for k in ("product", "region")]
+    for c in list(who):
+        if c["name"] in pinned_which:
+            who.remove(c); which.append(c)
+    for c in list(which):
+        if c["name"] in pinned_who:
+            which.remove(c); who.append(c)
+    have = {c["name"] for c in who + which}
+    for c in ds["columns"]:               # a matched column is used even when its name gives no hint
+        if c["name"] not in have and c["distinct"] >= 2 and c["type"] != "date" and c["name"] in pinned_who + pinned_which:
+            (who if c["name"] in pinned_who else which).append(c)
+    who.sort(key=lambda c: (c["name"] not in pinned_who, pinned_who.index(c["name"]) if c["name"] in pinned_who else 0, c["distinct"] > 15, c["distinct"]))
     hints = ["product", "categor", "region", "channel", "department", "type", "brand", "store", "branch", "country"]
-    which.sort(key=lambda c: (c["distinct"] > 40, next((i for i, h in enumerate(hints) if h in c["name"].lower()), 50), c["distinct"]))
+    which.sort(key=lambda c: (c["name"] not in pinned_which, pinned_which.index(c["name"]) if c["name"] in pinned_which else 0, c["distinct"] > 40, next((i for i, h in enumerate(hints) if h in c["name"].lower()), 50), c["distinct"]))
     return [c["name"] for c in who], [c["name"] for c in which]
 
 
@@ -215,7 +228,7 @@ def _find_target(ds, base):
     for t in store.DATASETS.values():
         if t["kind"] != "table" or t["id"] == base["id"] or t["rows"] > 500:
             continue
-        tcol = next((c["name"] for c in t["columns"] if c["type"] == "number" and (TARGET.search(c["name"]) or TARGET.search(t["name"])) and c["role"] != "id"), None)
+        tcol = next((c["name"] for c in t["columns"] if c["type"] == "number" and (c["name"] == CAT.role("target") or TARGET.search(c["name"]) or TARGET.search(t["name"])) and c["role"] != "id"), None)
         key = next((c["name"] for c in t["columns"] if c["type"] == "text" and c["name"].lower() in names and c["distinct"] == t["rows"]), None)
         if tcol and key:
             year = re.search(r"(20\d\d)", tcol) or re.search(r"(20\d\d)", t["name"])
