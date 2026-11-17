@@ -213,9 +213,9 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R67. The orb has no white line (crescent) around it.
 - R68. The first page no longer shows "Ready. Everything runs inside this
   browser tab."
-- R69. The first page has slow waves and ripples in the page background, kept to
-  the middle (around the orb and headline), not the whole page and not on the
-  cards (the empty cards stay plain white). Colours are pale: light teal with
+- R69. The first page has slow waves and ripples in the page background, as a
+  band running down the middle of the whole page from top to bottom, fading out
+  towards the sides; not on the cards (the empty cards stay plain white). Colours are pale: light teal with
   sky, aqua and periwinkle blues mixed in, never one dark blue.
   The empty cards' titles are questions: What?, Who?, When?, Which?, Why?, How?
 - R70. The automatic scroll when a card opens must not shake. It is planned once
@@ -304,6 +304,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | First-page background waves now run as a band down the middle of the whole page. |
 | 2026-11-17 | First-page background waves narrowed to the middle and changed to pale teal, sky, aqua and periwinkle blues. |
 | 2026-11-17 | First-page waves moved from the cards to the page background; red and green card moods made lighter and quieter. |
 | 2026-11-17 | Orb crescent removed; "Ready" line removed; centred waves and question titles on first-page cards; shake-free planned scroll; Back buttons on steps; one tap on step 3 with an orb "preparing" screen; 3-second reading and tidying screens; red/green/blue card moods. |

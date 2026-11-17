@@ -688,22 +688,24 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 
 /* ================= First page: no waves on the cards; instead slow waves and ripples across the page background */
 #previewCards .aura { display: none; }
-.page-aura { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
-  -webkit-mask-image: radial-gradient(ellipse min(46vw, 560px) min(44vh, 420px) at 50% 40%, #000 0, rgba(0,0,0,.7) 50%, transparent 100%);
-  mask-image: radial-gradient(ellipse min(46vw, 560px) min(44vh, 420px) at 50% 40%, #000 0, rgba(0,0,0,.7) 50%, transparent 100%); }
-.page-aura i { position: absolute; left: 50%; top: 40%; --w: min(54vw, 560px); width: var(--w); height: var(--w); margin: calc(var(--w) / -2) 0 0 calc(var(--w) / -2);
-  border-radius: 42% 58% 55% 45% / 48% 42% 58% 52%; filter: blur(56px); }
-/* light teal, sky, aqua and periwinkle: several blues, all pale */
-.page-aura i:nth-child(1) { background: rgba(108, 212, 232, .20); animation: page-wave-a 22s ease-in-out infinite alternate; }
-.page-aura i:nth-child(2) { --w: min(40vw, 420px); background: rgba(132, 184, 255, .16); animation: page-wave-b 27s ease-in-out infinite alternate; }
-.page-aura i:nth-child(3) { --w: min(34vw, 360px); background: rgba(142, 236, 220, .16); animation: page-wave-c 19s ease-in-out infinite alternate; }
-.page-aura i:nth-child(4) { --w: min(30vw, 320px); background: rgba(170, 178, 255, .12); animation: page-wave-b 23s ease-in-out infinite alternate-reverse; }
-.page-aura b { position: absolute; left: 50%; top: 32%; --w: min(44vw, 380px); width: var(--w); height: var(--w); margin: calc(var(--w) / -2) 0 0 calc(var(--w) / -2); border-radius: 50%;
+/* A soft band of pale blues running down the middle of the page, top to bottom, slowly flowing. */
+.page-aura { --band: min(30vw, 360px); position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent calc(50% - var(--band)), rgba(0,0,0,.75) calc(50% - var(--band) * .45), #000 50%, rgba(0,0,0,.75) calc(50% + var(--band) * .45), transparent calc(50% + var(--band)));
+  mask-image: linear-gradient(90deg, transparent calc(50% - var(--band)), rgba(0,0,0,.75) calc(50% - var(--band) * .45), #000 50%, rgba(0,0,0,.75) calc(50% + var(--band) * .45), transparent calc(50% + var(--band))); }
+.page-aura i { position: absolute; left: 50%; --w: calc(var(--band) * 1.5); width: var(--w); height: calc(var(--w) * 1.25); margin-left: calc(var(--w) / -2);
+  border-radius: 42% 58% 55% 45% / 48% 42% 58% 52%; filter: blur(54px); animation-timing-function: ease-in-out; animation-iteration-count: infinite; animation-direction: alternate; }
+/* light teal, sky, aqua, periwinkle and teal again, stacked down the page */
+.page-aura i:nth-child(1) { top: -12%; background: rgba(108, 212, 232, .22); animation-name: band-a; animation-duration: 21s; }
+.page-aura i:nth-child(2) { top: 16%; background: rgba(132, 184, 255, .17); animation-name: band-b; animation-duration: 26s; }
+.page-aura i:nth-child(3) { top: 42%; background: rgba(142, 236, 220, .18); animation-name: band-a; animation-duration: 24s; animation-delay: -8s; }
+.page-aura i:nth-child(4) { top: 66%; background: rgba(170, 178, 255, .13); animation-name: band-b; animation-duration: 19s; animation-delay: -5s; }
+.page-aura i:nth-child(5) { top: 88%; background: rgba(110, 208, 240, .18); animation-name: band-a; animation-duration: 23s; animation-delay: -12s; }
+.page-aura b { position: absolute; left: 50%; --w: calc(var(--band) * 1.2); width: var(--w); height: var(--w); margin: calc(var(--w) / -2) 0 0 calc(var(--w) / -2); border-radius: 50%;
   border: 1.5px solid rgba(100, 200, 225, .20); box-shadow: 0 0 30px rgba(140, 236, 230, .12) inset; opacity: 0; animation: page-ripple 12s cubic-bezier(.2, .6, .3, 1) infinite; }
-.page-aura b + b { animation-delay: 6s; border-color: rgba(140, 170, 255, .16); }
-@keyframes page-wave-a { 0% { transform: translate(-6%, -4%) rotate(0deg) scale(1); } 50% { transform: translate(5%, 6%) rotate(40deg) scale(1.08); } 100% { transform: translate(-3%, 8%) rotate(90deg) scale(.95); } }
-@keyframes page-wave-b { 0% { transform: translate(8%, -6%) rotate(0deg); } 50% { transform: translate(-6%, 4%) rotate(-50deg) scale(1.12); } 100% { transform: translate(4%, 10%) rotate(-100deg) scale(.92); } }
-@keyframes page-wave-c { 0% { transform: translate(-10%, 8%) rotate(0deg); } 50% { transform: translate(8%, -6%) rotate(60deg) scale(1.15); } 100% { transform: translate(-4%, -10%) rotate(120deg); } }
+.page-aura b:nth-of-type(1) { top: 24%; }
+.page-aura b:nth-of-type(2) { top: 68%; animation-delay: 6s; border-color: rgba(140, 170, 255, .16); }
+@keyframes band-a { 0% { transform: translate(-14%, -6%) rotate(0deg) scale(1); } 50% { transform: translate(12%, 8%) rotate(35deg) scale(1.1); } 100% { transform: translate(-6%, 16%) rotate(80deg) scale(.94); } }
+@keyframes band-b { 0% { transform: translate(14%, 6%) rotate(0deg) scale(1.05); } 50% { transform: translate(-12%, -8%) rotate(-40deg) scale(.92); } 100% { transform: translate(8%, -14%) rotate(-85deg) scale(1.12); } }
 @keyframes page-ripple { 0% { transform: scale(.3); opacity: 0; } 15% { opacity: 1; } 100% { transform: scale(1.9); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .page-aura * { animation: none !important; } .page-aura b { display: none; } }
 @media print { .page-aura { display: none; } }
@@ -718,9 +720,4 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .scard[data-mood="good"] .aura i:nth-child(2) { background: rgba(150, 226, 186, .12); }
 .scard[data-mood="good"] .aura i:nth-child(3) { background: rgba(110, 204, 208, .07); }
 .scard[data-mood="good"] .aura b { border-color: rgba(80, 186, 130, .14); }
-@media (max-width: 760px) {
-  .page-aura { -webkit-mask-image: radial-gradient(ellipse 78vw 34vh at 50% 34%, #000 0, rgba(0,0,0,.7) 50%, transparent 100%); mask-image: radial-gradient(ellipse 78vw 34vh at 50% 34%, #000 0, rgba(0,0,0,.7) 50%, transparent 100%); }
-  .page-aura i { --w: 92vw; top: 34%; filter: blur(40px); }
-  .page-aura i:nth-child(2) { --w: 70vw; } .page-aura i:nth-child(3) { --w: 60vw; } .page-aura i:nth-child(4) { --w: 54vw; }
-  .page-aura b { --w: 70vw; top: 26%; }
-}
+@media (max-width: 760px) { .page-aura { --band: 48vw; } .page-aura i { filter: blur(36px); } }
