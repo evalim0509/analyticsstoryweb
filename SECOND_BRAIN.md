@@ -215,7 +215,9 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   browser tab."
 - R69. The first page has slow waves and ripples in the page background, as a
   band running down the middle of the whole page from top to bottom, fading out
-  towards the sides; not on the cards (the empty cards stay plain white). Colours are pale: light teal with
+  towards the sides; not on the cards (the empty cards stay plain white). On
+  phones the band is narrower (about half the screen) so there is white space
+  either side, in proportion with the laptop view. Colours are pale: light teal with
   sky, aqua and periwinkle blues mixed in, never one dark blue.
   The empty cards' titles are questions: What?, Who?, When?, Which?, Why?, How?
 - R70. The automatic scroll when a card opens must not shake. It is planned once
@@ -225,7 +227,8 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   step 2 goes to step 1, step 3 to step 2.
 - R72. On step 3, one tap on a subject goes straight to the story (replaces R61's
   two taps). A waiting screen with the orb shows "Reading the numbers…", "Finding
-  what changed…", "Preparing your story…" in turn.
+  what changed…", "Preparing your story…" in turn, for about 2 seconds
+  (quicker than the reading and tidying screens).
 - R73. Reading files and tidying take at least about 3 seconds on screen, with
   the orb and changing lines, so the work feels thorough. Real work is never cut
   short.
@@ -304,6 +307,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | First-page wave band narrowed on phones; step 3 "preparing your story" screen shortened to about 2 seconds. |
 | 2026-11-17 | First-page background waves now run as a band down the middle of the whole page. |
 | 2026-11-17 | First-page background waves narrowed to the middle and changed to pale teal, sky, aqua and periwinkle blues. |
 | 2026-11-17 | First-page waves moved from the cards to the page background; red and green card moods made lighter and quieter. |

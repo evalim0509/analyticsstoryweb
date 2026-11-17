@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.9");
+const worker = new Worker("assets/worker.js?v=2026-11-17.10");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -249,7 +249,7 @@ function leaveFlow() { S.flow = false; S.pending = false; show(S.state ? (S.stor
 const MIN_WAIT = 3000;
 const atLeast = (ms, work) => Promise.all([work, new Promise((r) => setTimeout(r, ms))]).then(([v]) => v);
 let busyTimer = null;
-function waitScreen(lines) {
+function waitScreen(lines, ms = MIN_WAIT) {
   lines = [].concat(lines);
   const text = h("p", { class: "flow-text", "aria-live": "polite" }, lines[0]);
   clearInterval(busyTimer);
@@ -258,7 +258,7 @@ function waitScreen(lines) {
     if (!text.isConnected || i >= lines.length - 1) return clearInterval(busyTimer);
     text.classList.add("swap");
     setTimeout(() => { text.textContent = lines[++i]; text.classList.remove("swap"); }, 380);
-  }, Math.max(900, MIN_WAIT / lines.length));
+  }, Math.max(600, ms / lines.length));
   return h("div", { class: "flow-wait" }, orbEl("mid"), text,
     engineReady ? null : h("p", { class: "muted" }, "The first visit takes a little longer while the engine downloads."));
 }
@@ -855,10 +855,11 @@ const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_st
 async function renderStory() {
   const root = $("view-story");
   const fresh = S.story.fresh || !root.children.length;
-  if (fresh) { root.replaceChildren(waitScreen(["Reading the numbers…", "Finding what changed…", "Preparing your story…"])); S.story.arrived = false; }
+  const STORY_WAIT = 1800;                                        // a little quicker than reading or tidying
+  if (fresh) { root.replaceChildren(waitScreen(["Reading the numbers…", "Finding what changed…", "Preparing your story…"], STORY_WAIT)); S.story.arrived = false; }
   S.story.fresh = false;
   let st;
-  try { st = await atLeast(fresh ? MIN_WAIT : 0, call("story_build", { spec: S.story.spec })); } catch (err) { st = { error: "Something went wrong: " + err.message }; }
+  try { st = await atLeast(fresh ? STORY_WAIT : 0, call("story_build", { spec: S.story.spec })); } catch (err) { st = { error: "Something went wrong: " + err.message }; }
   if (S.view !== "story") return;
   if (st.error) { root.replaceChildren(h("p", { class: "frame" }, st.error), h("button", { class: "secondary", onclick: () => show("pick") }, "Choose something else")); return; }
   S.story.data = st;

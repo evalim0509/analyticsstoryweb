@@ -720,4 +720,4 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .scard[data-mood="good"] .aura i:nth-child(2) { background: rgba(150, 226, 186, .12); }
 .scard[data-mood="good"] .aura i:nth-child(3) { background: rgba(110, 204, 208, .07); }
 .scard[data-mood="good"] .aura b { border-color: rgba(80, 186, 130, .14); }
-@media (max-width: 760px) { .page-aura { --band: 48vw; } .page-aura i { filter: blur(36px); } }
+@media (max-width: 760px) { .page-aura { --band: 27vw; } .page-aura i { filter: blur(30px); } .page-aura i:nth-child(n) { opacity: .85; } }
