@@ -190,8 +190,28 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R58. The colour in a hovered or open card sits on its right edge: the orb's
   blue, cyan and violet, much fainter, rolling like waves with soft ripples.
   On touch screens it shows only on the open card.
+- R59. The step bar on steps 1 to 3 is clickable: pressing a part goes to that
+  step. Once data is in, earlier steps are a look back, nothing is undone: step
+  1 shows "You added N tables" (details folded) with Continue; step 2 shows what
+  is left to tidy, or "Everything is tidy" with Continue. Later steps cannot be
+  reached while new files are still waiting to be confirmed.
+- R60. The story page has a "Back" button at the top that returns to step 3.
+- R61. Step 3 choices are story cards (same look and motion). Tapping one opens
+  it to one plain line and a big "See the story" button. (Replaces R50's
+  "tapping goes straight to the story".)
+- R62. All story cards start closed; none opens by itself.
+- R63. The automatic scroll when a card opens is gentle at both ends (about 1.6
+  seconds) and only happens when the card sits low on screen.
+- R64. The first-page headline splits evenly on phones ("Add your data" / "and
+  get the gist"), in lighter type; one line on wide screens.
+- R65. The "A look at ..." line is centred, and its phrases stay together when
+  it wraps ("in Q3 2025", "for everything").
+- R66. The orb follows the owner's five keyframe screenshots over a calm
+  12-second cycle: violet-blue lens, azure rounded triangle, deep blue round
+  core, light cyan core with mint and yellow, deep blue half-moon; cyan, pink,
+  violet and mint clouds move round the core on the same clock.
 - R50. The choices on "What do you want to understand?" use the same card
-  design and motion. Tapping one goes straight to the story.
+  design and motion. (Tapping now opens the card first; see R61.)
 
 ## Business knowledge
 
@@ -258,6 +278,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | Clickable step bar with look-back steps; Back button on the story; step 3 as story cards; all story cards closed at first; gentler auto-scroll; even two-line headline on phones; centred "A look at" line; orb re-animated from the owner's keyframes. |
 | 2026-11-17 | First page is now the empty story cards under the Gist orb; adding files is three big-button steps with details folded; Your data has one "Fix all" and no text list; slower, steadier card opening; colour waves on the right edge of cards; orb logo. |
 | 2026-11-17 | Story cards: topic word as a bold heading with the finding as a grey subtitle under it; slow drifting blue hues inside hovered and open cards. Printed briefing tidied. |
 | 2026-11-17 | Story and subject choices restyled as outlined white cards with arrival, lift, expand and flow-in motion; slower eased auto-scroll; frosted top bar; phone layout pass; footer note and start-page notes removed; business-year choice moved behind "Explore further". Fixed the data check's side list, whose layout had been disturbed by the card edge buttons sharing its style name. |

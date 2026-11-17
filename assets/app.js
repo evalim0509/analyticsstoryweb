@@ -54,7 +54,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-17.4");
+const worker = new Worker("assets/worker.js?v=2026-11-17.5");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -207,17 +207,42 @@ window.addEventListener("drop", (e) => {
 
 // ---- the three steps after files are added: 1 what I found, 2 tidy, 3 what to understand
 const orbEl = (size) => h("span", { class: "orb " + (size || ""), "aria-hidden": "true" },
-  h("span", { class: "core" }, h("i", { class: "o1" }), h("i", { class: "o2" }), h("i", { class: "o3" }), h("b", { class: "arc" })));
+  h("span", { class: "core" }, ["haze", "mn", "cy", "pk", "vi", "bl", "lit"].map((c) => h("i", { class: c })), h("b", { class: "arc" })));
+document.querySelectorAll("[data-orb]").forEach((el) => el.replaceWith(orbEl(el.dataset.orb)));
 const aura = () => h("span", { class: "aura", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("b"), h("b"));
+// The progress bar: each part is a button that takes you back (or forward) to that step once your data is in.
+const STEP_NAMES = ["Your files", "Tidy", "Choose what to understand"];
 function stepper(n) {
-  return h("div", { class: "stepper", role: "img", "aria-label": `Step ${n} of 3` },
-    h("span", {}, `Step ${n} of 3`), h("span", { class: "bars" }, [1, 2, 3].map((i) => h("i", { class: i <= n ? "on" : "" }))));
+  return h("nav", { class: "stepper", "aria-label": "Steps" },
+    h("span", {}, `Step ${n} of 3`),
+    h("span", { class: "bars" }, [1, 2, 3].map((i) => h("button", {
+      class: (i <= n ? "on" : "") + (i === n ? " cur" : ""), title: STEP_NAMES[i - 1], "aria-label": `Step ${i}: ${STEP_NAMES[i - 1]}`,
+      "aria-current": i === n ? "step" : null, disabled: i !== n && (!S.state || (S.pending && i > 1)) ? true : null,
+      onclick: () => { if (i !== n) goStep(i); } }, h("i")))));
+}
+function goStep(i) {
+  S.pending = false;
+  if (i === 1) reviewFiles();
+  else if (i === 2) stepTidy(true);
+  else show("pick");
+}
+// Step 1 again, once the data is in: what was added, with the details folded away.
+function reviewFiles() {
+  const tables = S.state.datasets.filter((d) => d.kind === "table"), docs = S.state.documents || [];
+  flowPage(1,
+    h("h1", { class: "ask-big" }, tables.length ? `You added ${plural(tables.length, "table")}.` : "You added text, but no tables of numbers."),
+    h("p", { class: "frame" }, "Check this is what you expected, then continue."),
+    h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepTidy(true) }, "Continue"),
+      h("button", { class: "link", onclick: () => fileInput.click() }, "Add more files")),
+    h("details", { class: "flow-more" }, h("summary", {}, "Show details"),
+      h("ul", {}, tables.map((d) => h("li", {}, h("strong", {}, d.name), ` — ${plural(d.rows, "row")}, ${plural(d.columns.length, "field")}, from ${d.source}`)),
+        docs.length ? h("li", {}, `${plural(docs.length, "document")} with text you can ask about`) : null)));
 }
 function flowPage(step, ...kids) {
   if (S.view !== "flow") show("flow");
   $("view-flow").replaceChildren(h("div", { class: "flow arrive" }, step ? stepper(step) : null, ...kids));
 }
-function leaveFlow() { S.flow = false; show(S.state ? (S.story ? "story" : "pick") : "welcome"); }
+function leaveFlow() { S.flow = false; S.pending = false; show(S.state ? (S.story ? "story" : "pick") : "welcome"); }
 
 function busy(text) {
   flowPage(null, h("div", { class: "flow-wait" }, orbEl("mid"), h("p", { class: "flow-text" }, text),
@@ -269,9 +294,11 @@ function showPreview(previews) {
   const tables = picks.filter((k) => k.index !== "text").length;
   const bad = previews.filter((p) => p.error).map((p) => p.file);
   const files = previews.length;
+  S.pending = true;
   const go = h("button", { class: "primary big" }, "Looks right, continue");
   const count = () => { const n = picks.filter((k) => k.include).length; go.disabled = !n; go.textContent = n ? "Looks right, continue" : "Nothing selected"; };
   go.addEventListener("click", async () => {
+    S.pending = false;
     busy("Bringing your data in…");
     let st = null;
     for (const p of previews.filter((p) => p.token)) {
@@ -300,12 +327,20 @@ function showPreview(previews) {
 }
 
 // Step 2: one button tidies everything Gist is sure about. Skipped when there is nothing to tidy.
-async function stepTidy() {
+async function stepTidy(review) {
   busy("Checking your data…");
   const o = await call("story_options");
   S.pick = o;
   const t = o.tidy, n = t.fixes + t.links;
-  if (!n) { show("pick"); return; }
+  if (!n && !review) { show("pick"); return; }
+  if (!n) {
+    flowPage(2,
+      h("h1", { class: "ask-big" }, "Everything is tidy."),
+      h("p", { class: "frame" }, t.to_review ? `${plural(t.to_review, "item")} still need${t.to_review === 1 ? "s" : ""} a person's judgement, such as unusually large values. They are not changed.` : "There is nothing left to fix."),
+      h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => show("pick") }, "Continue"),
+        t.to_review ? h("button", { class: "link", onclick: () => show("data") }, "Look at them") : null));
+    return;
+  }
   const fix = h("button", { class: "primary big", onclick: async () => {
     fix.disabled = true; fix.textContent = "Fixing…";
     const r = await call("story_tidy");
@@ -780,18 +815,23 @@ async function renderPick() {
   const { options } = S.pick;
   if (S.view !== "pick") return;
   const choose = (o) => { S.flow = false; S.story = newStory(o); show("story"); };
-  root.replaceChildren(
-    S.flow ? stepper(3) : null,
+  const wrap = h("div", { class: "scards arrive" });
+  wrap.append(...options.map((o, i) => {
+    const key = "s" + i, ds = datasetById(o.dataset);
+    return cardShell(key, i + 1, o.label, o.detail, o.label, () => toggleCards(wrap, wrap.dataset.open === key ? null : key, true),
+      h("div", { class: "sbody" }, h("p", { class: "more" }, `${ds ? "Built from " + plural(ds.rows, "row") + ". " : ""}The cards will tell you what happened, who and what is behind it, when, why it changed and how to respond.`),
+        h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => choose(o) }, "See the story"))));
+  }));
+  root.replaceChildren(h("div", { class: "flow arrive" },
+    stepper(3),
     h("h1", { class: "ask-big" }, "What do you want to understand?"),
-    options.length ? h("p", { class: "frame" }, "Pick one. You can change it at any time.") : null,
-    options.length ? h("div", { class: "subjects arrive" }, options.map((o, i) => h("button", { class: "subject", style: `--i:${i}`, onclick: () => choose(o) },
-        aura(), h("span", { class: "n" }, i + 1), h("b", {}, o.label), h("span", { class: "d" }, o.detail), h("span", { class: "go", "aria-hidden": "true" }))))
-      : h("p", { class: "frame" }, "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further."));
+    h("p", { class: "frame" }, options.length ? "Pick one. You can change it at any time." : "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further.")),
+    options.length ? wrap : null);
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const yearStart = () => { try { return Number(localStorage.getItem("gist.yearStart")) || 1; } catch { return 1; } };
-const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_start: yearStart() }, open: "what" });
+const newStory = (o) => ({ spec: { dataset: o.dataset, value: o.value, fiscal_start: yearStart() }, open: null });
 
 async function renderStory() {
   const root = $("view-story");
@@ -820,13 +860,15 @@ async function renderStory() {
       h("option", { value: JSON.stringify([f.field, v]), selected: !!current && current.field === f.field && current.value[0] === v }, v))))) : null;
   const how = st.cards.find((c) => c.key === "how");
   const caution = how && how.actions.find((a) => a.link);
-  if (!st.cards.some((c) => c.key === S.story.open)) S.story.open = "what";
+  if (!st.cards.some((c) => c.key === S.story.open)) S.story.open = null;
   const cards = st.cards.map((c, i) => storyCard(c, i + 1, st, retell));
   const yearSel = st.periods.length ? h("label", { class: "yearstart" }, "Business year starts in ",
     h("select", { onchange: (e) => { try { localStorage.setItem("gist.yearStart", e.target.value); } catch {} retell({ fiscal_start: Number(e.target.value) }); } },
       MONTHS.map((m, i) => h("option", { value: i + 1, selected: i + 1 === st.fiscal_start }, m)))) : null;
   root.replaceChildren(
-    h("p", { class: "frame controls" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label), period ? [" in ", period] : null, filter ? [" for ", filter] : null),
+    h("div", { class: "backrow" }, h("button", { class: "back", title: "Back to: What do you want to understand?", onclick: () => show("pick") }, h("span", { "aria-hidden": "true" }, "←"), " Back")),
+    h("p", { class: "frame controls" }, h("span", { class: "grp" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label)),
+      period ? [" ", h("span", { class: "grp" }, "in ", period)] : null, filter ? [" ", h("span", { class: "grp" }, "for ", filter)] : null),
     h("div", { class: "print-title" }, h("h1", {}, st.title), h("p", {}, `Prepared ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} from ${st.source}`)),
     caution ? h("p", { class: "caution" }, caution.why + " ", h("button", { class: "link", onclick: () => show("data") }, "Review now")) : null,
     h("div", { class: "scards" + (S.story.arrived ? "" : " arrive") }, cards),
@@ -887,21 +929,22 @@ function followCard(el) {
   if (followStop) followStop();
   const head = el.querySelector(".shead");
   const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const from = head.getBoundingClientRect().top, hi = 84, lo = Math.max(hi + 40, window.innerHeight * 0.34);
-  const to = from < hi ? hi : from > lo ? hi + 6 : from;
-  const D = calm ? 0 : 1400, start = performance.now();
-  let live = true;
+  const from = head.getBoundingClientRect().top, hi = 84, lo = Math.max(hi + 40, window.innerHeight * 0.42);
+  const to = from < hi ? hi : from > lo ? Math.max(hi + 10, window.innerHeight * 0.16) : from;
+  const D = calm ? 0 : 1600, start = performance.now();
+  let live = true, y = window.scrollY;
   const stop = () => { live = false; ["wheel", "touchstart", "keydown"].forEach((t) => window.removeEventListener(t, stop)); };
   followStop = stop;
   ["wheel", "touchstart", "keydown"].forEach((t) => window.addEventListener(t, stop, { passive: true }));
-  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const ease = (t) => -(Math.cos(Math.PI * t) - 1) / 2;          // gentle start, gentle finish
   const step = (now) => {
     if (!live || !el.classList.contains("open") || !el.isConnected) return stop();
     const t = D ? Math.min(1, (now - start) / D) : 1;
     const want = from + (to - from) * ease(t);
-    const off = head.getBoundingClientRect().top - want;
-    if (Math.abs(off) > 0.5) window.scrollBy(0, off);
-    if (now - start > D + 350) return stop();
+    y += head.getBoundingClientRect().top - want;                  // keep a fractional position, so no rounding judder
+    window.scrollTo(0, y);
+    y = Math.abs(window.scrollY - y) > 2 ? window.scrollY : y;     // the page could not scroll that far
+    if (now - start > D + 300) return stop();
     requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
