@@ -56,17 +56,48 @@ def _candidate(name, where, grid):
             notes.append({"column": n, "count": len(bad), "examples": sorted(set(bad))[:5],
                           "text": f"{len(bad)} entr{'y' if len(bad) == 1 else 'ies'} in {n} "
                                   f"{'is' if len(bad) == 1 else 'are'} not a {typ} ({shown}) and will be treated as blank."})
+    # amounts written in more than one currency are never added together
+    currency, warnings = [], []
+    for j, n in enumerate(list(names)):
+        if types[j] != "number":
+            continue
+        codes = {store.currency_of(r[j]) for r in body} - {None}
+        if "$" in codes and len(codes - {"$"}) == 1:
+            codes = codes - {"$"}                                        # "$1,000" beside "USD 1,000": one currency
+        if len(codes) > 1:
+            field = f"{n} currency"
+            names.append(field); types.append("text")
+            cols.append([store.currency_of(r[j]) or None for r in body])
+            currency.append({"column": n, "field": field, "codes": sorted(codes)})
+            warnings.append(f"{n} mixes currencies ({', '.join(sorted(codes))}). Gist will not add them together; you will pick one currency in the story.")
+    for j, n in enumerate(names):
+        if types[j] == "text" and re.fullmatch(r"(currency( code)?|curr|ccy|currency id)", n.strip(), re.I):
+            codes = sorted({v for v in cols[j] if v})
+            if len(codes) > 1:
+                currency.append({"column": "*", "field": n, "codes": codes})
+                warnings.append(f"Amounts are in more than one currency ({', '.join(codes[:5])}, shown in {n}). Gist will not add them together; you will pick one currency in the story.")
+    for w in warnings:
+        notes.insert(0, {"column": None, "count": 0, "examples": [], "text": w})
+    orders = {}
+    for j, n in enumerate(names):
+        if types[j] == "date" and j < len(body[0] if body else []):
+            o = store.date_order([r[j] for r in body])
+            if o:
+                orders[n] = o
     net = accounting.debit_credit(names, types, cols)
+    net_info = None
     if net:
         names = names + [net[0]]; types = types + ["number"]; cols = cols + [net[1]]
+        net_info = {"column": net[0], "sign": net[2], "debit": net[3], "credit": net[4]}
         report = report or {"template": None, "notes": []}
-        report["notes"].append("added Net amount (debit minus credit)")
+        report["notes"].append(f"added Net amount ({'credits' if net[2] == 'credit' else 'debits'} count as positive)")
     data = [list(r) for r in zip(*cols)] if cols else []
     if report and (report["notes"] or report["template"]):
         what = f"Recognised an export from {report['template']}" if report["template"] else "Recognised an accounting report layout"
         notes.insert(0, {"column": None, "count": 0, "examples": [], "text": what + (": " + "; ".join(report["notes"]) if report["notes"] else "") + "."})
     return {"name": name, "where": where, "columns": names, "types": types, "data": data, "notes": notes,
-            "template": report["template"] if report else None}
+            "template": report["template"] if report else None, "currency": currency, "currency_warning": " ".join(warnings), "net": net_info, "date_orders": orders,
+            "read_removed": {"rows": report.get("removed_rows", 0), "totals": report.get("removed_totals", {})} if report else {"rows": 0, "totals": {}}}
 
 
 def _xml_text(node, tag):
@@ -250,7 +281,7 @@ def preview(filename, data):
     PENDING[token] = {"file": filename, "tables": tables, "passages": passages}
     return {"file": filename, "token": token, "text_count": len(passages),
             "text_sample": [p["text"][:160] for p in passages[:3]],
-            "tables": [{"index": i, "name": t["name"], "where": t["where"], "rows": len(t["data"]), "template": t.get("template"),
+            "tables": [{"index": i, "name": t["name"], "where": t["where"], "rows": len(t["data"]), "template": t.get("template"), "currency_warning": t.get("currency_warning") or "",
                         "columns": [{"name": n, "type": ty} for n, ty in zip(t["columns"], t["types"])],
                         "sample": t["data"][:8], "notes": t["notes"]} for i, t in enumerate(tables)]}
 
@@ -266,6 +297,10 @@ def confirm(token, choices=None):
             continue
         ds_id = store.add_table(ch.get("name") or t["name"], p["file"], t["columns"], t["data"], t["where"])
         store.DATASETS[ds_id]["import_notes"] = t["notes"]
+        store.DATASETS[ds_id]["read_removed"] = t.get("read_removed") or {"rows": 0, "totals": {}}
+        store.DATASETS[ds_id]["currency"] = t.get("currency") or []
+        store.DATASETS[ds_id]["net"] = t.get("net")
+        store.DATASETS[ds_id]["date_orders"] = t.get("date_orders") or {}
         made.append(ds_id)
     if choices.get("text", {}).get("include", True):
         for x in p["passages"]:

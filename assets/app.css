@@ -876,3 +876,11 @@ button.big { padding: 16px 34px; font-size: 17px; font-weight: 650; border-radiu
 .sbody .table-wrap.story-table { max-height: none; }
 @media (max-width: 760px) { .hero-fig .big { font-size: 40px; } .bullets li { font-size: 15.5px; } }
 @media print { .hero-fig .big { font-size: 22pt; } .bullets li { font-size: 9.5pt; padding: 1pt 0; border: 0; } .show-all { display: none; } }
+
+.pill-static { display: inline-block; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--line-soft); border-radius: 999px; padding: 7px 14px; }
+.fallback { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.fallback .pill-select { font-size: 14px; padding: 5px 30px 5px 12px; }
+.bullets li.warn { color: var(--bad); }
+.bullets li.warn .arr { font-weight: 800; }
+.story-stop { text-align: left; font-size: 19px; color: var(--ink); max-width: 36em; margin: 10px auto 0; }
+.currency-pick { flex-direction: row; flex-wrap: wrap; max-width: 36em; margin: 24px auto 0; }

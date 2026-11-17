@@ -12,7 +12,7 @@ How it is used:
 - **The app reads the "Business words" table** below when it starts, so the
   chatbot understands the business's own vocabulary.
 
-Last updated: 2026-11-18
+Last updated: 2026-11-19
 
 ## Purpose
 
@@ -329,6 +329,36 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   each share. Figures in tables stay exact (decision of 2026-11-16 kept).
 - R98. The Why table no longer has "Share of the change (%)"; the coloured Change
   column says it more plainly.
+- R99. Report cleanup (title rows, group headings, subtotal and total rows) runs
+  only when a file is recognised as an export from a known accounting system.
+  Ordinary files are read exactly as they are. A total row is dropped only if
+  one of its amounts equals the sum of the rows above it, or its "Total" label
+  is the first filled cell and the row has no date or ID. Every row keeps the
+  same number of cells as the header. (Fixes lost sales and shifted rows.)
+- R100. The reconciliation starts from the file as read: rows removed while
+  reading (subtotal and total rows) are its first step, with their amount.
+  "Matching the file" is said only when the file's total equals the total used.
+- R101. Amounts written in more than one currency (RM and USD in one column, or
+  a Currency column with several values) are never added together. Step 1 warns;
+  the story stops with "Show MYR only / Show USD only" until one is chosen.
+- R102. Net amount (from Debit and Credit): Match your fields shows which side
+  counts as positive and lets the owner change it. Credits count as positive by
+  default for sales and income. The choice is shown in "How I got this" and
+  saved in catalogues.
+- R103. Margin and Margin % are worked out only over rows that have both sales
+  and cost. "How I got this" states the coverage ("cost is known for 87% of
+  sales"); below 90% the card warns; below 50% margin is not offered.
+- R104. Dates whose day and month cannot be told apart (no day above 12) show
+  "Dates read as day/month (03/04/2026 = 3 April) · change" on the date row; the
+  answer is saved in catalogues and stated in "How I got this".
+- R105. Messy dates spread over two columns: on the date row, "If it is blank,
+  use [another date column]" makes a combined column (first column, else the
+  second) that the story follows; saved in catalogues; stated in "How I got this".
+- R106. "Since your last briefing" applies only to the same story: same measure,
+  table, column set, filters and period type. It compares the numbers, and shows
+  nothing when the key differs or the number is unchanged.
+- R107. Matched fields remember their table, so two tables with an "Amount"
+  column never collide; with several tables the table name is shown on each pill.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -373,6 +403,8 @@ that matter, who uses the output.
 | 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
 | 2026-11-17 | The Dribbble orb reference could not be read from the build environment (the site blocks automated visits), so the orb was matched to a screenshot the owner uploaded. | Owner's choice to share the image. |
 | 2026-11-17 | The chart in an open card is drawn about 0.4 seconds into the opening, and its space is reserved in advance. | Drawing during the first frames made the opening stutter, and late sizing made it jump. |
+| 2026-11-19 | In small files, one cell that is not a date or a number no longer turns the whole column into text; it is reported in step 1 and treated as blank. | Found while fixing the plain-file repro: one stray note line made the Date column unusable. |
+| 2026-11-19 | Mixed currencies are blocked in the story only; Ask and Tables & charts do not yet refuse them. | Scope of this round; listed under ideas. |
 | 2026-11-18 | Who and Which still prefer a grouping with few values (for example Segment, or a matched Salesperson) for the headline; a matched Customer with many values stays one tap away. | A share of 7% among 131 customers says less than a share among 4 segments. |
 | 2026-11-18 | When guessing the sales field, line-level amounts (Line Amount, Row Total, Sales Amount) are preferred. | In Xero exports the invoice Total repeats on every line, so adding it up would overcount. |
 | 2026-11-18 | Catalogues match by column name only, across all tables at once. | Simplest to fill in; the table name is shown beside each column. |
@@ -400,11 +432,13 @@ that matter, who uses the output.
 - Follow-up questions that remember the previous one ("and for South?").
 - Joining on two fields at once.
 - Scanned PDFs (text recognition).
+- Refuse mixed-currency totals in Ask and Tables & charts too (the story already does).
 
 ## Change log
 
 | Date | Change |
 |---|---|
+| 2026-11-19 | Fixes A1–A8: report cleanup only for recognised exports (no lost sales or shifted rows); reconciliation starts from the file as read; mixed currencies blocked; debit/credit sign choice; margin over rows with cost only, with coverage; day/month order shown and changeable; since-last keyed on the whole story; table-aware field matches. New: combined date from two columns. |
 | 2026-11-18 | Story cards: coloured ▲/▼ chips in sentences, big headline figure, bold bullets with arrows, highlighted charts with values on bars, short tables with arrows and share bars. |
 | 2026-11-18 | Quick checks merged into Match your fields (four steps); matching redesigned as two plain columns with pills and tags, Continue at top and bottom; one-line page for returning users; catalogues keep added-up/averaged; reconciliation line moved to the bottom of the story. |
 | 2026-11-18 | Data catalogues: Match your fields step, saved named catalogues (download and load), Catalogues tab, matched fields used by the engine and taught to Ask. "A look at" line made the headline; reconciliation made small. Fixed stray "null" text on some screens. |

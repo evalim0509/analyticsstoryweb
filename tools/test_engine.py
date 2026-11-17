@@ -139,4 +139,69 @@ ac = call("preview", name="ac.xlsx", data=(ACC / "autocount_sales_listing.xlsx")
 assert next(c for c in ac["columns"] if c["name"] == "Total")["type"] == "number"          # "RM 1,234.00" read as a number
 from engine import store as _st
 assert _st.parse_number("(1,234.50)") == -1234.5 and _st.parse_number("1,234.00 Cr") == -1234 and _st.parse_number("RM 2,000") == 2000 and _st.parse_number("$1,500.25") == 1500.25
+# --- A1: an ordinary file is never treated as a report (no lost sales, no Group column, rows stay aligned)
+rep = "Date,Customer,Product,Quantity,Amount\n2026-01-03,Acme,Total Gym Pro,1,1200\n2026-01-04,Beta,Widget,2,40\nWalk-in customer,,,,\n2026-01-05,,Widget,1,20\n"
+r1 = call("preview", name="repro.csv", data=rep.encode())["tables"][0]
+assert [c["name"] for c in r1["columns"]] == ["Date", "Customer", "Product", "Quantity", "Amount"] and r1["template"] is None, r1["columns"]
+amt_i = 4
+assert sum(r[amt_i] or 0 for r in r1["sample"]) == 1260 and r1["sample"][0][2] == "Total Gym Pro" and r1["sample"][3][0] == "2026-01-05", r1["sample"]
+# --- A2: rows removed while reading are the first step of the reconciliation
+qbd = call("confirm", token=call("preview", name="qb2.xlsx", data=(ACC / "quickbooks_sales_by_customer.xlsx").read_bytes())["token"])["datasets"][-1]
+qbs = call("story_build", spec={"dataset": qbd["id"], "value": "Amount"})
+assert qbs["reconcile"]["steps"][1][0].startswith("Removed when reading") and qbs["reconcile"]["steps"][1][1] == -5 and "matching the file" not in qbs["reconcile"]["line"], qbs["reconcile"]
+# --- A3: mixed currencies are not added together until one is chosen
+mix = "Date,Region,Amount\n" + "".join(f"2025-{m:02d}-15,{r},{c} {1000 + m}\n" for m in range(1, 13) for r, c in (("North", "RM"), ("South", "USD")))
+mp_ = call("preview", name="mix.csv", data=mix.encode())
+assert "more than one currency" in mp_["tables"][0]["currency_warning"] or "mixes currencies" in mp_["tables"][0]["currency_warning"], mp_["tables"][0]
+mxd = call("confirm", token=mp_["token"])["datasets"][-1]
+blocked = call("story_build", spec={"dataset": mxd["id"], "value": "Amount"})
+assert "error" in blocked and blocked["currency"]["codes"] == ["MYR", "USD"], blocked
+one = call("story_build", spec={"dataset": mxd["id"], "value": "Amount", "filters": [{"field": blocked["currency"]["field"], "op": "is", "value": ["MYR"]}]})
+assert "error" not in one and "MYR" in one["title"], one.get("error")
+# --- A4: Net amount counts credits as positive for sales; the owner can switch it
+sg = call("confirm", token=call("preview", name="sage2.csv", data=(ACC / "sage_nominal_activity.csv").read_bytes())["token"])["datasets"][-1]
+net = next(n for n in call("catalogue_start")["nets"] if n["dataset"] == sg["id"])
+assert net["sign"] == "credit"
+before = _st.scalar(f'SELECT TOTAL("Net amount") FROM "{_st.DATASETS[sg["id"]]["table"]}"')
+call("catalogue_set", roles={}, signs={sg["id"]: "debit"})
+after = _st.scalar(f'SELECT TOTAL("Net amount") FROM "{_st.DATASETS[sg["id"]]["table"]}"')
+assert abs(before + after) < 0.01 and before != 0, (before, after)
+assert any("debits count as positive" in x for x in call("story_build", spec={"dataset": sg["id"], "value": "Net amount"})["cards"][0]["steps"])
+# --- A5: margin only over rows with both sales and cost; warned below 90%, not offered below 50%
+def margin_file(missing_every, keep_every=None):
+    gap = (lambda m, d: (m * 3 + d) % keep_every != 0) if keep_every else (lambda m, d: (m * 3 + d) % missing_every == 0)
+    body = "".join(f"2025-{m:02d}-{d:02d},P{d % 4},{100 + d},{'' if gap(m, d) else 60 + d}\n" for m in range(1, 13) for d in (5, 15, 25))
+    return call("confirm", token=call("preview", name=f"m{missing_every}.csv", data=("Date,Product,Sales,Cost\n" + body).encode())["token"])["datasets"][-1]
+m8 = margin_file(6)          # cost missing on about one row in six
+mlabels = [x["label"] for x in call("measure_list", dataset=m8["id"])["suggested"]]
+assert "Margin" in mlabels, mlabels
+mc = call("story_build", spec={"dataset": m8["id"], "value": "calc:margin"})
+assert "Cost is known for only" in mc["cards"][0]["more"][0] and any("cost is known for" in x for x in mc["cards"][0]["steps"]), mc["cards"][0]["more"]
+m3 = margin_file(0, keep_every=3)   # cost known on only about a third of sales
+assert "Margin" not in [x["label"] for x in call("measure_list", dataset=m3["id"])["suggested"]]
+# --- A6: dates that cannot tell day from month are flagged, and can be read the other way
+amb = "When,Amount\n" + "".join(f"{d:02d}/{m:02d}/2025,{10 * m + d}\n" for m in range(1, 13) for d in (1, 5, 9))
+ad = call("confirm", token=call("preview", name="amb.csv", data=amb.encode())["token"])["datasets"][-1]
+o6 = next(o for o in call("catalogue_start")["date_orders"] if o["dataset"] == ad["id"])
+assert o6["order"] == "dmy" and o6["example"] == "2025-01-01"
+call("catalogue_set", roles={}, orders={f"{ad['id']}|When": "mdy"})
+assert _st.scalar(f'SELECT "When" FROM "{_st.DATASETS[ad["id"]]["table"]}" WHERE "Amount" = 15') == "2025-05-01"
+# --- your question: the date is sometimes in one column, sometimes in another
+two = "Date1,Date2,Amount\n" + "".join((f"2025-{m:02d}-10,," if m % 2 else f",2025-{m:02d}-10,") + f"{100 + m}\n" for m in range(1, 13))
+td = call("confirm", token=call("preview", name="twodates.csv", data=two.encode())["token"])["datasets"][-1]
+res = call("catalogue_set", roles={"date": {"table": td["id"], "column": "Date1"}}, date_fallback={"table": td["id"], "column": "Date2"})
+assert res["roles"]["date"]["column"] == "Date1 or Date2"
+ts = call("story_build", spec={"dataset": td["id"], "value": "Amount"})
+assert next(c for c in ts["cards"] if c["key"] == "when")["dim"] == "Date1 or Date2" and any("where Date1 was blank" in x for x in ts["cards"][0]["steps"])
+# --- A7: the comparison key covers measure, table, columns, filters and period type
+k1 = call("story_build", spec={"dataset": ds0, "value": "Sales Amount"})["brief_key"]
+k2 = call("story_build", spec={"dataset": ds0, "value": "Sales Amount", "filters": [{"field": "Region", "op": "is", "value": ["North"]}]})["brief_key"]
+assert k1 != k2 and k1["table"] and k1["columns"] and all("value" in c["brief"] for c in call("story_build", spec={"dataset": ds0, "value": "Sales Amount"})["cards"] if c["key"] in ("what", "when", "why"))
+# --- A8: two tables with an "Amount" column do not collide
+t_a = call("confirm", token=call("preview", name="a.csv", data=b"Date,Amount,Shop\n2025-01-05,10,X\n2025-02-05,20,Y\n2025-03-05,30,X\n")["token"])["datasets"][-1]
+t_b = call("confirm", token=call("preview", name="b.csv", data=b"Date,Amount,Shop\n2025-01-05,1,X\n2025-02-05,2,Y\n2025-03-05,3,X\n")["token"])["datasets"][-1]
+call("catalogue_set", roles={"sales": {"table": t_b["id"], "column": "Amount"}})
+from engine import catalogue as _cat
+assert _cat.role("sales", _st.DATASETS[t_b["id"]]) == "Amount" and _cat.role("sales", _st.DATASETS[t_a["id"]]) is None
+call("catalogue_set", roles={})
 print("All engine checks passed.")

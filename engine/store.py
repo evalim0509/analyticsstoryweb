@@ -41,6 +41,24 @@ _CURRENCY = re.compile(r"^(rm|myr|sgd|s\$|usd|us\$|aud|a\$|nzd|gbp|eur|idr|rp|ph
 _DRCR = re.compile(r"\s*(dr|cr)\.?$", re.I)
 
 
+_CURRENCY_OF = [(re.compile(p, re.I), code) for p, code in [
+    (r"^\s*(rm|myr)(?![a-z])|(?<![a-z])(rm|myr)\s*$", "MYR"), (r"^\s*(s\$|sgd)|(?<![a-z])sgd\s*$", "SGD"), (r"^\s*(us\$|usd)|(?<![a-z])usd\s*$", "USD"),
+    (r"^\s*(a\$|aud)|(?<![a-z])aud\s*$", "AUD"), (r"^\s*nzd|(?<![a-z])nzd\s*$", "NZD"), (r"^\s*(hk\$|hkd)|(?<![a-z])hkd\s*$", "HKD"),
+    (r"€|^\s*eur|(?<![a-z])eur\s*$", "EUR"), (r"£|^\s*gbp|(?<![a-z])gbp\s*$", "GBP"), (r"¥|^\s*(jpy|cny|rmb)|(?<![a-z])(jpy|cny|rmb)\s*$", "JPY/CNY"),
+    (r"^\s*(idr|rp)|(?<![a-z])idr\s*$", "IDR"), (r"^\s*php|(?<![a-z])php\s*$", "PHP"), (r"^\s*thb|(?<![a-z])thb\s*$", "THB"),
+    (r"^\s*(inr|rs\.?)\s?\d|(?<![a-z])inr\s*$", "INR"), (r"\$", "$")]]
+
+
+def currency_of(v):
+    """The currency written with an amount ("RM 1,000" -> MYR), or None when none is written."""
+    if not isinstance(v, str):
+        return None
+    for rx, code in _CURRENCY_OF:
+        if rx.search(v):
+            return code
+    return None
+
+
 def parse_number(v):
     if isinstance(v, bool):
         return None
@@ -88,6 +106,24 @@ def parse_date(v, fmt_hint=None):
     return None, None
 
 
+_ORDER_PAIRS = [("%d/%m/%Y", "%m/%d/%Y"), ("%d-%m-%Y", "%m-%d-%Y"), ("%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M")]
+
+
+def date_order(values):
+    """For dates written like 03/04/2026: which order was used (day/month or month/day), and whether
+    the file cannot tell (no day above 12 anywhere). None for unambiguous formats such as 2026-04-03."""
+    strs = [v.strip() for v in values if isinstance(v, str) and v.strip()][:2000]
+    if not strs:
+        return None
+    for dmy, mdy in _ORDER_PAIRS:
+        ok_d = sum(1 for v in strs if parse_date(v, dmy)[1] == dmy)
+        ok_m = sum(1 for v in strs if parse_date(v, mdy)[1] == mdy)
+        if max(ok_d, ok_m) < 0.9 * len(strs):
+            continue
+        return {"order": "dmy" if ok_d >= ok_m else "mdy", "ambiguous": ok_d == ok_m}
+    return None
+
+
 def is_blank(v):
     return v is None or (isinstance(v, float) and v != v) or (isinstance(v, str) and v.strip().lower() in BLANKS)
 
@@ -99,7 +135,8 @@ def infer_column(values):
         return "text", [None] * len(values), []
     nums = [parse_number(v) for v in present]
     n_ok = sum(1 for n in nums if n is not None)
-    if n_ok >= 0.9 * len(present) and n_ok > 0:
+    mostly = lambda ok: ok > 0 and (ok >= 0.9 * len(present) or (len(present) >= 3 and len(present) - ok <= 1))   # one odd cell is reported, not fatal
+    if mostly(n_ok):
         out, bad = [], []
         for v in values:
             if is_blank(v):
@@ -117,7 +154,7 @@ def infer_column(values):
             fmt = best
     dates = [parse_date(v, fmt)[0] for v in present]
     d_ok = sum(1 for d in dates if d)
-    if d_ok >= 0.9 * len(present):
+    if mostly(d_ok):
         out, bad = [], []
         for v in values:
             if is_blank(v):

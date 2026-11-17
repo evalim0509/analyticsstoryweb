@@ -130,11 +130,23 @@ def story_build(spec):
 
 def catalogue_start():
     """What Gist needs, every column in the files, and Gist's best guess for each need."""
-    return {"needs": catalogue.needs(), "columns": catalogue.columns(), "guess": catalogue.guess(), "roles": dict(catalogue.ROLES)}
+    return {"needs": catalogue.needs(), "columns": catalogue.columns(), "guess": catalogue.guess(), "roles": dict(catalogue.ROLES), "nets": catalogue.nets(),
+            "date_orders": catalogue.date_orders()}
 
 
-def catalogue_set(roles):
-    return {"roles": catalogue.set_roles(roles), "options": story.options()}
+def catalogue_set(roles, signs=None, orders=None, date_fallback=None):
+    """roles: {need: {table, column}}; signs: {dataset: "credit"|"debit"}; orders: {"dataset|column": "dmy"|"mdy"};
+    date_fallback: {table, column} to use where the matched date is blank."""
+    for dataset, sign in (signs or {}).items():
+        catalogue.set_sign(dataset, sign)
+    for key, order in (orders or {}).items():
+        dataset, column = key.split("|", 1)
+        catalogue.set_order(dataset, column, order)
+    roles = dict(roles or {})
+    d, fb = roles.get("date"), date_fallback or {}
+    if isinstance(d, dict) and fb.get("column") and fb.get("table") == d.get("table"):
+        roles["date"] = {"table": d["table"], "column": catalogue.combine_dates(d["table"], d["column"], fb["column"])}
+    return {"roles": catalogue.set_roles(roles), "options": story.options(), "columns": catalogue.columns()}
 
 
 def story_checks():

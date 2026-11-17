@@ -249,6 +249,14 @@ def build(spec):
     label, of_what, expr, unit = M["label"], M["of"], M["expr"], M["unit"]
     filters = [f for f in (spec.get("filters") or []) if f.get("value")]
     where, params, fwords = builder.where_clause(ds, filters)
+    for cur_info in base.get("currency") or []:
+        affected = (cur_info["column"] == "*" and M["kind"] != "count" and value) or (cur_info["column"] != "*" and q(cur_info["column"]) in M["expr"])
+        pinned = any(f["field"] == cur_info["field"] and len(f.get("value") or []) == 1 for f in filters)
+        if affected and not pinned:
+            what = "these amounts" if cur_info["column"] == "*" else cur_info["column"]
+            return {"error": f"{what[0].upper() + what[1:]} {'are' if cur_info['column'] == '*' else 'is'} in more than one currency ({', '.join(cur_info['codes'])}). "
+                             "Gist does not add different currencies together. Choose one currency to see the story.",
+                    "currency": {"field": cur_info["field"], "codes": cur_info["codes"]}}
     dates = [c["name"] for c in base["columns"] if c["type"] == "date"]
     date = spec.get("date") if spec.get("date") in dates else MS.chosen_date(base)
     run = _Run(ds, expr, where, params, date)
@@ -304,6 +312,12 @@ def build(spec):
     # ---------------- time frame
     cur = prev = yoy = None
     series, notes, period_kind, periods = [], [], None, []
+    if date in (base.get("combined") or {}):
+        first_d, second_d = base["combined"][date]
+        notes.append(f"Used {first_d} for the date, and {second_d} where {first_d} was blank.")
+    order = (base.get("date_orders") or {}).get(date)
+    if order and order.get("ambiguous"):
+        notes.append(f"Read the dates in {date} as {'day/month' if order['order'] == 'dmy' else 'month/day'}; the file itself cannot tell.")
     plabel = "all the data"
     prev_label = yoy_label = None
     if date:
@@ -415,13 +429,15 @@ def build(spec):
                 state = "ahead of" if tinfo["reached"] > pace + 3 else "behind" if tinfo["reached"] < pace - 3 else "in line with"
                 more.append(B(f"{ylabel} to date: **{short(ta)}** against a {word} of **{short(tt)}**, **{tinfo['reached']:.0f}% delivered** with {pace:.0f}% of the year gone, {state} the pace required",
                               None if state == "in line with" else (state == "ahead of") != lower_better))
+    if M.get("coverage") is not None and M["coverage"] < 0.9:
+        more.insert(0, {"t": f"Cost is known for only **{M['coverage']:.0%}** of {M['a_name']}, so this covers those sales only", "dir": None, "mood": "bad", "warn": True})
     steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"{M['verb']} for {plabel}."]
     if prev or yoy:
         steps.append("Did the same for " + " and ".join(x for x in (prev_label, yoy_label) if x) + ", and compared.")
     if tinfo:
         steps.append(f"Compared {tinfo['year']} so far with the {tinfo['word']} in “{tinfo['source']}”.")
     cards.append({"key": "what", "word": "What", "ask": "What happened?", "sentence": s, "parts": what_parts, "more": more, "brief": {"text": f"{short(now)} in {plabel}"},
-                  "hero": {"big": short(now), "small": plabel if cur else "across all the data"}, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
+                  "hero": {"big": short(now), "small": plabel if cur else "across all the data", "value": now}, "mood": _mood(_pct(now, pv) if prev else None, lower_better),
                   "chart": {"type": "bar", "labels": [p[0] for p in chart_pts], "series": [{"name": label, "data": [p[1] for p in chart_pts]}], "x_title": "", "y_title": label, "time": True,
                             "values": True, "mood_last": (chip(now, pv, "") or {}).get("mood") if prev else None} if len(chart_pts) > 1 else None,
                   "table": {"columns": ["Period", label, "Change to now"], "rows": [[r[0], r[1], None if r[2] is None else round(r[2], 1)] for r in table],
@@ -472,7 +488,7 @@ def build(spec):
         if prev:
             steps.append(f"Did the same for {prev_label} to see who rose and fell. Small groups (under 3% of the total) are not named as risers or fallers.")
         return {"key": key, "word": word, "ask": ask, "sentence": s, "more": more, "dims": dims, "dim": dim,
-                "hero": {"big": f"{top['share']:.0f}%", "small": f"{top['name']}, of {of_what}"} if len(items) > 1 else {"big": short(top["value"]), "small": top["name"]},
+                "hero": {"big": f"{top['share']:.0f}%", "small": f"{top['name']}, of {of_what}", "value": round(top["share"], 1)} if len(items) > 1 else {"big": short(top["value"]), "small": top["name"], "value": top["value"]},
                 "chart_types": [{"key": k, "label": l} for k, l in SHARE] if len(items) > 1 else [], "chart_type": kind,
                 "chart": {"type": "share" if kind == "share" else "hbar", "labels": labels, "series": [{"name": label, "data": data}], "x_title": dim, "y_title": label,
                           "values": True, "highlight": labels.index(top["name"]) if top["name"] in labels else 0} if len(items) > 1 else None,
@@ -497,7 +513,7 @@ def build(spec):
         steps = [start] + notes + ([M["formula"]] if M["formula"] else []) + [f"Grouped the rows for {plabel} by {dim} and worked out {label} for each group.",
                  "Left out groups with fewer than 3 rows, because an average of one or two rows says little."]
         return {"key": key, "word": word, "ask": ask, "sentence": s, "more": more, "dims": dims, "dim": dim, "chart_types": [], "chart_type": "bars",
-                "hero": {"big": short(top["value"]), "small": f"{top['name']}, the highest"},
+                "hero": {"big": short(top["value"]), "small": f"{top['name']}, the highest", "value": top["value"]},
                 "chart": {"type": "hbar", "labels": [i["name"] for i in shown], "series": [{"name": label, "data": [i["value"] for i in shown]}], "x_title": dim, "y_title": label,
                           "values": True, "unit": unit, "highlight": [i["name"] for i in shown].index(top["name"]) if top["name"] in [i["name"] for i in shown] else 0} if len(items) > 1 else None,
                 "table": {"columns": cols, "rows": trows, "meta": {"pct" if unit != "%" else "pts": [2] if prev else [], "up_good": not lower_better}}, "steps": steps, "sql": run.sql.get(key),
@@ -535,7 +551,7 @@ def build(spec):
         kind = _chart_choice(spec, "when", TIME)
         trows = [[_mlabel(m), v, (round(_pct(v, series[i - 12][1]), 1) if i >= 12 and series[i - 12][1] else None)] for i, (m, v) in enumerate(series)]
         cards.append({"key": "when", "word": "When", "ask": "When did it happen?", "sentence": s, "parts": when_parts, "more": more, "mood": _mood(yearly, lower_better, 3),
-                      "hero": {"big": short(float(y[-1])), "small": f"in {_mlabel(series[-1][0])}, the latest month"},
+                      "hero": {"big": short(float(y[-1])), "small": f"in {_mlabel(series[-1][0])}, the latest month", "value": float(y[-1])},
                       "dims": dates, "dim": date, "dim_word": "Date used",
                       "chart_types": [{"key": k, "label": l} for k, l in TIME], "chart_type": kind,
                       "chart": {"type": "line" if kind == "line" else "bar", "labels": [_mlabel(m) for m, _ in series], "series": [{"name": label, "data": [v for _, v in series]}], "x_title": "", "y_title": label, "time": True, "highlight_last": True},
@@ -600,7 +616,7 @@ def build(spec):
             else:
                 chart = {"type": "hbar", "labels": [r["name"] for r in big], "series": [{"name": prev_label, "data": [r["before"] for r in big]}, {"name": plabel, "data": [r["now"] for r in big]}], "x_title": dim, "y_title": label}
             why_card = {"key": "why", "word": "Why", "ask": "Why did it change?", "sentence": s, "parts": why_parts, "more": more, "dims": list(per), "dim": dim,
-                        "hero": {"big": _signed(delta) if unit != "%" else f"{delta:+.1f} pts", "small": f"vs {prev_label}", "dir": "up" if delta > 0 else "down" if delta < 0 else "flat", "mood": moodof(delta > 0) if delta else "neutral"},
+                        "hero": {"big": _signed(delta) if unit != "%" else f"{delta:+.1f} pts", "small": f"vs {prev_label}", "dir": "up" if delta > 0 else "down" if delta < 0 else "flat", "mood": moodof(delta > 0) if delta else "neutral", "value": delta},
                         "mood": _mood(_pct(now, pv), lower_better, 0.5),
                         "chart_types": [{"key": k, "label": l} for k, l in WHY], "chart_type": kind, "chart": chart,
                         "table": {"columns": [dim, prev_label, plabel, "Change"],
@@ -685,12 +701,16 @@ def build(spec):
     for c in cards:
         c.setdefault("mood", "neutral")      # Who, Which and How describe; they do not judge
         c.setdefault("brief", {"text": c["sentence"]})
+        if (c.get("hero") or {}).get("value") is not None:
+            c["brief"]["value"] = c["hero"]["value"]
     rec = MS.reconcile(ds, base, M, where, params, fwords, cur, plabel, now, date, run.count(*cur) if cur else run.count())
     lines.insert(1, rec["line"])
     by_key = {c["key"]: c for c in cards}
     return {"title": title, "label": label, "period": period_kind, "periods": periods, "period_label": plabel, "scope": scope,
             "filter_fields": filter_fields, "filters": filters, "cards": cards, "summary": "\n".join(lines), "source": files,
             "measures": [{"value": m["value"], "label": m["label"]} for m in MS.listing(ds, base)], "value": value, "fiscal_start": fs0 + 1,
+            "brief_key": {"measure": value or "rows", "table": base["name"], "columns": "|".join(sorted(c["name"] for c in base["columns"])),
+                          "filters": fwords, "period": period_kind},
             "reconcile": rec, "measure": {"kind": M["kind"], "unit": unit, "formula": M["formula"], "additive": M["additive"]},
             "spec": {"dataset": ds["id"], "value": value, "period": period_kind, "filters": filters, "date": date, "fiscal_start": fs0 + 1,
                      "charts": {k: c["chart_type"] for k, c in by_key.items() if c.get("chart_type")},

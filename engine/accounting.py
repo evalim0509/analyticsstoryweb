@@ -49,8 +49,19 @@ def _split_camel(s):
     return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(s))
 
 
+AMOUNT_COL = re.compile(r"amount|total|debit|credit|\bnet\b|balance|\bdr\b|\bcr\b|value|price", re.I)
+ID_COL = re.compile(r"\bid\b|\bno\.?$|number|\bnum\b|\bref|doc|invoice|tran|\bsrc\b", re.I)
+
+
+def _is_date(v):
+    return not store.is_blank(v) and store.parse_date(v)[0] is not None
+
+
 def tidy(grid):
-    """Returns (grid, info). info: {template, notes} or None when nothing was recognised."""
+    """Returns (grid, info). info: {template, notes, removed_rows, removed_totals}, or None for an ordinary file.
+
+    Report cleanup (title rows, group headings, subtotal rows) only happens when the layout is recognised as an
+    export from a known accounting system. Ordinary files are left exactly as they are."""
     grid = [list(r) for r in grid if any(not store.is_blank(v) for v in r)]
     if len(grid) < 3:
         return grid, None
@@ -61,52 +72,77 @@ def tidy(grid):
     header = [(_split_camel(str(v).lstrip("*").strip()) if _text(v) else None) for v in grid[hi]]
     lower = [str(h).lower() for h in header if h]
     flat = [h.replace(" ", "") for h in lower]
-    name, group_word = next(((n, g) for n, g, test in TEMPLATES if test(lower) or test(flat)), (None, "Group"))
+    name, group_word = next(((n, g) for n, g, test in TEMPLATES if test(lower) or test(flat)), (None, None))
+    if not name:
+        return grid, None
     body = grid[hi + 1:]
     width = max(len(header), max((len(r) for r in body), default=0))
-    header += [None] * (width - len(header))
-    notes = []
-    if hi:
-        notes.append(f"skipped {hi} title row{'s' if hi != 1 else ''} above the column names")
-    # group headings: a lone text cell in the first filled column, with data rows under it
-    first_col = next((j for j in range(width) if any(not store.is_blank((r + [None] * width)[j]) for r in body)), 0)
-    out, group, groups, totals, used_group = [], None, 0, 0, False
+    header = header + [None] * (width - len(header))
+    amount_cols = [j for j, h in enumerate(header) if h and AMOUNT_COL.search(h)]
+    id_cols = [j for j, h in enumerate(header) if h and ID_COL.search(h)]
+    notes = [f"skipped {hi} title row{'s' if hi != 1 else ''} above the column names"] if hi else []
+    out, groups_of, removed = [], [], []
+    group, groups, running, since = None, 0, {j: 0.0 for j in amount_cols}, 0
     for r in body:
-        r = r + [None] * (width - len(r))
+        r = (r + [None] * width)[:width]
         cells = _filled(r)
         lead = next((v for v in r if not store.is_blank(v)), None)
-        if _text(lead) and TOTAL_ROW.match(str(lead)):
-            totals += 1
-            continue
         if re.match(r"^(accrual|cash) basis", str(lead or ""), re.I):
-            continue                                         # QuickBooks footer line
-        if len(cells) == 1 and _text(cells[0]) and not store.parse_date(cells[0])[0] and store.parse_number(cells[0]) is None:
-            group = str(cells[0]).strip()
-            groups += 1
+            continue                                         # QuickBooks footer line, not data
+        if any(_text(v) and TOTAL_ROW.match(str(v)) for v in r):
+            first_is_label = _text(lead) and TOTAL_ROW.match(str(lead))
+            has_date = any(_is_date(v) for v in r if v is not lead)
+            has_id = any(not store.is_blank(r[j]) for j in id_cols if r[j] is not lead)
+            sums = [(store.parse_number(r[j]), running[j]) for j in amount_cols if store.parse_number(r[j]) is not None]
+            equals = since > 0 and any(abs(v - total) < 0.005 for v, total in sums)
+            if equals or (first_is_label and not has_date and not has_id):
+                removed.append(r)
+                running, since = {j: 0.0 for j in amount_cols}, 0
+                continue
+        if len(cells) == 1 and _text(cells[0]) and not _is_date(cells[0]) and store.parse_number(cells[0]) is None:
+            group, groups = str(cells[0]).strip(), groups + 1
+            running, since = {j: 0.0 for j in amount_cols}, 0
             continue
-        if any(_text(v) and TOTAL_ROW.match(str(v)) for v in r[:3]):
-            totals += 1
-            continue
-        out.append(([group] if groups else []) + r)
-        used_group = used_group or group is not None
-    if groups and used_group:
+        out.append(r); groups_of.append(group); since += 1
+        for j in amount_cols:
+            v = store.parse_number(r[j])
+            if v is not None:
+                running[j] += v
+    if groups and any(groups_of):
         header = [group_word] + header
+        out = [[g] + r for g, r in zip(groups_of, out)]
         notes.append(f"took the {group_word.lower()} name from {groups} group heading{'s' if groups != 1 else ''}")
-    if totals:
-        notes.append(f"left out {totals} subtotal and total row{'s' if totals != 1 else ''} so nothing is counted twice")
-    if header and store.is_blank(header[0]) and not groups:
-        header[0] = group_word if name else "Column 1"
-    if not name and not notes:
-        return grid, None
-    return [header] + out, {"template": name, "notes": notes}
+    if removed:
+        notes.append(f"left out {len(removed)} subtotal and total row{'s' if len(removed) != 1 else ''} so nothing is counted twice")
+    if header and store.is_blank(header[0]):
+        header[0] = group_word
+    assert all(len(r) == len(header) for r in out), "every row must line up with the column names"
+    names = [h for h in header[1:]] if groups and any(groups_of) else header
+    totals = {}
+    for r in removed:                                       # what the removed rows held, for the reconciliation
+        for j, h in enumerate(names):
+            v = store.parse_number(r[j]) if h else None
+            if v is not None:
+                key = re.sub(r"\s+", " ", re.sub(r"[_\-]+", " ", str(h))).strip()
+                totals[key] = totals.get(key, 0) + v
+    return [header] + out, {"template": name, "notes": notes, "removed_rows": len(removed), "removed_totals": totals}
+
+
+INCOME = re.compile(r"sales|income|revenue|turnover|fees? received", re.I)
 
 
 def debit_credit(columns, types, cols):
-    """When a table has Debit and Credit number columns, add Net (debit minus credit)."""
+    """When a table has Debit and Credit number columns, add a Net amount.
+    Credits count as positive for sales and income (where most of the money is credits); otherwise debits do.
+    The owner can change this in Match your fields. Returns (name, values, sign, debit column, credit column)."""
     low = [c.lower().strip(". ") for c in columns]
     di = next((i for i, c in enumerate(low) if c in ("debit", "dr", "debit amount", "local debit")), None)
     ci = next((i for i, c in enumerate(low) if c in ("credit", "cr", "credit amount", "local credit")), None)
     if di is None or ci is None or types[di] != "number" or types[ci] != "number" or any(c.lower() == "net amount" for c in columns):
         return None
-    net = [None if a is None and b is None else (a or 0) - (b or 0) for a, b in zip(cols[di], cols[ci])]
-    return "Net amount", net
+    dr, cr = sum(v or 0 for v in cols[di]), sum(v or 0 for v in cols[ci])
+    words = " ".join(str(v) for j, t in enumerate(types) if t == "text" for v in set(cols[j][:500]) if v)
+    sign = "credit" if INCOME.search(words) or cr >= dr else "debit"
+    k = 1 if sign == "debit" else -1
+    net = [None if a is None and b is None else k * ((a or 0) - (b or 0)) for a, b in zip(cols[di], cols[ci])]
+    return "Net amount", net, sign, columns[di], columns[ci]

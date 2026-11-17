@@ -67,11 +67,13 @@ def suggested(ds):
         uc = mc if mc and UNIT_COST.search(mc) else _num(ds, UNIT_COST)
         if uc and qty:
             cost_expr, cost_words = f"({q(qty)} * {q(uc)})", f"{qty} × {uc}"
-    if sales and cost_expr:
-        out.append({"value": "calc:margin", "label": "Margin", "op": "minus", "a": q(sales), "b": cost_expr,
-                    "formula": f"Margin = total {sales} minus total cost ({cost_words}).", "detail": f"{sales} minus cost"})
-        out.append({"value": "calc:margin_pct", "label": "Margin %", "op": "margin_pct", "a": q(sales), "b": cost_expr,
-                    "formula": f"Margin % = ({sales} minus cost ({cost_words})) ÷ {sales} × 100.", "detail": f"Margin as a share of {sales}"})
+    cov = coverage(ds, q(sales), cost_expr) if sales and cost_expr else None
+    if sales and cost_expr and cov is not None and cov >= 0.5:          # below half, margin would say little
+        known = f" Worked out only over rows where both {sales} and cost are known: cost is known for {cov:.0%} of {sales}."
+        out.append({"value": "calc:margin", "label": "Margin", "op": "minus", "a": q(sales), "b": cost_expr, "coverage": cov, "a_name": sales,
+                    "formula": f"Margin = {sales} minus cost ({cost_words}).{known}", "detail": f"{sales} minus cost"})
+        out.append({"value": "calc:margin_pct", "label": "Margin %", "op": "margin_pct", "a": q(sales), "b": cost_expr, "coverage": cov, "a_name": sales,
+                    "formula": f"Margin % = ({sales} minus cost ({cost_words})) ÷ {sales} × 100.{known}", "detail": f"Margin as a share of {sales}"})
     oid = CAT.role("order", ds) or next((c["name"] for c in ds["columns"] if c["role"] == "id" and ORDER_ID.search(c["name"])), None)
     if sales and oid:
         out.append({"value": "calc:aov", "label": "Average order value", "op": "per_id", "a": q(sales), "b": q(oid),
@@ -80,6 +82,11 @@ def suggested(ds):
         out.append({"value": "calc:unit_price", "label": "Average price per unit", "op": "divide", "a": q(sales), "b": q(qty),
                     "formula": f"Average price per unit = total {sales} ÷ total {qty}.", "detail": f"{sales} per {qty}"})
     return out
+
+
+def coverage(ds, a, b):
+    """Share of the first number (for example sales) on rows where the second (for example cost) is also known."""
+    return scalar(f"SELECT TOTAL(CASE WHEN {a} IS NOT NULL AND {b} IS NOT NULL THEN {a} END) / NULLIF(TOTAL({a}), 0) FROM {q(ds['table'])}")
 
 
 def _user(ds):
@@ -92,8 +99,10 @@ def _user(ds):
             continue
         words = {"minus": "minus", "divide": "divided by", "per_id": "per different", "per_row": "per row"}[m["op"]]
         b = "" if m["op"] == "per_row" else f" {m['b']}"
-        out.append({"value": f"calc:{m['id']}", "label": m["name"], "op": m["op"], "a": q(m["a"]), "b": q(m["b"]) if m.get("b") else None,
-                    "formula": f"{m['name']} = total {m['a']} {words}{(' total' if m['op'] in ('minus', 'divide') else '')}{b}.", "detail": f"{m['a']} {words}{b}", "user": True})
+        cov = coverage(ds, q(m["a"]), q(m["b"])) if m["op"] == "minus" else None
+        known = f" Worked out only over rows where both are known: {m['b']} is known for {cov:.0%} of {m['a']}." if cov is not None and cov < 0.999 else ""
+        out.append({"value": f"calc:{m['id']}", "label": m["name"], "op": m["op"], "a": q(m["a"]), "b": q(m["b"]) if m.get("b") else None, "coverage": cov, "a_name": m["a"],
+                    "formula": f"{m['name']} = total {m['a']} {words}{(' total' if m['op'] in ('minus', 'divide') else '')}{b}.{known}", "detail": f"{m['a']} {words}{b}", "user": True})
     return out
 
 
@@ -111,21 +120,27 @@ def define(ds, base, value):
         if not d:
             raise ValueError("That measure is no longer available.")
         a, b, op = d["a"], d["b"], d["op"]
-        expr = {"minus": f"(TOTAL({a}) - TOTAL({b}))",
-                "margin_pct": f"(100.0 * (TOTAL({a}) - TOTAL({b})) / NULLIF(TOTAL({a}), 0))",
+        both = lambda x: f"TOTAL(CASE WHEN {a} IS NOT NULL AND {b} IS NOT NULL THEN {x} END)"     # rows missing either are left out
+        expr = {"minus": f"({both(a)} - {both(b)})",
+                "margin_pct": f"(100.0 * ({both(a)} - {both(b)}) / NULLIF({both(a)}, 0))",
                 "divide": f"(TOTAL({a}) * 1.0 / NULLIF(TOTAL({b}), 0))",
                 "per_id": f"(TOTAL({a}) * 1.0 / NULLIF(COUNT(DISTINCT {b}), 0))",
                 "per_row": f"AVG({a})"}[op]
         return {"value": value, "label": d["label"], "of": d["label"], "expr": expr, "additive": op == "minus",
                 "kind": "ratio" if op != "minus" else "money", "unit": "%" if op == "margin_pct" else "", "column": None,
-                "formula": d["formula"], "verb": "Worked out " + d["label"]}
+                "formula": d["formula"], "verb": "Worked out " + d["label"], "coverage": d.get("coverage"), "a_name": d.get("a_name")}
     kind, _ = kind_of(base, value)
     if kind == "rate":
         return {"value": value, "label": f"Average {value}", "of": f"Average {value}", "expr": f"AVG({q(value)})", "additive": False,
                 "kind": "rate", "unit": "", "column": value, "formula": f"Average {value} = the average of {value} over the rows in each period or group.",
                 "verb": f"Averaged {value}"}
+    net = base.get("net") or {}
+    formula = None
+    if net.get("column") == value:
+        pos, neg = (net["credit"], net["debit"]) if net["sign"] == "credit" else (net["debit"], net["credit"])
+        formula = f"{value} = {pos} minus {neg}: {'credits' if net['sign'] == 'credit' else 'debits'} count as positive."
     return {"value": value, "label": value, "of": value, "expr": f"SUM({q(value)})", "additive": True, "kind": kind, "unit": "",
-            "column": value, "formula": None, "verb": f"Added up {value}"}
+            "column": value, "formula": formula, "verb": f"Added up {value}"}
 
 
 def listing(ds, base):
@@ -242,7 +257,12 @@ def reconcile(ds, base, M, where, params, fwords, period, plabel, period_total, 
     gone = scalar(f"SELECT COUNT(*) FROM {orig} WHERE _row NOT IN (SELECT _row FROM {t})") or 0
     gone_total = tot(orig, f" WHERE _row NOT IN (SELECT _row FROM {t})")
     changed = (t0 - t1 - gone_total) if col else 0
-    steps = [["Rows in " + base["source"], n0, t0]]
+    rr = base.get("read_removed") or {"rows": 0, "totals": {}}
+    read_rows, read_total = rr.get("rows", 0), (rr.get("totals", {}).get(col, 0) if col else None)
+    file_rows, file_total = n0 + read_rows, (t0 + read_total) if col else None
+    steps = [["Rows in " + base["source"], file_rows, file_total]]
+    if read_rows:
+        steps.append(["Removed when reading the file (subtotal and total rows)", -read_rows, -read_total if col else None])
     if gone:
         steps.append(["Removed when tidying (for example repeated rows)", -gone, -gone_total if col else None])
     if col and abs(changed) > 0.005:
@@ -253,18 +273,20 @@ def reconcile(ds, base, M, where, params, fwords, period, plabel, period_total, 
         steps.append(["Narrowed to rows where " + " and ".join(fwords), nf, scalar(f"SELECT TOTAL({q(col)}) FROM {q(ds['table'])}{where}", params) if col else None])
     if period:
         steps.append([plabel, notes_rows, period_total if M["additive"] else None])
-    fv = lambda v: store.fmt(round(v, 2) if isinstance(v, float) else v)
+    fv = lambda v: f"{v:,.0f}" if abs(v - round(v)) < 0.005 else f"{v:,.2f}"
     file = base["source"]
-    line = f"From {n0:,} rows in {file}"
-    line += f": {gone:,} removed when tidying, {n1:,} used." if gone else f": all {n1:,} used."
+    line = f"From {file_rows:,} rows in {file}"
+    removed_bits = ([f"{read_rows:,} subtotal or total rows removed when reading"] if read_rows else []) + ([f"{gone:,} removed when tidying"] if gone else [])
+    line += (": " + ", ".join(removed_bits) + f", {n1:,} used.") if removed_bits else f": all {n1:,} used."
     if col:
-        if abs(t0 - t1) < 0.005:
+        if abs(file_total - t1) < 0.005:
             line += f" {M['label']} adds up to {fv(t1)}, matching the file."
         else:
-            parts = [f"{fv(gone_total)} in removed rows"] if gone else []
+            parts = ([f"{fv(read_total)} in subtotal and total rows"] if read_rows and abs(read_total) > 0.005 else []) + \
+                    ([f"{fv(gone_total)} in rows removed when tidying"] if gone and abs(gone_total) > 0.005 else [])
             if abs(changed) > 0.005:
                 parts.append(f"{fv(changed)} from changes such as filled-in blanks")
-            line += f" {M['label']} adds up to {fv(t1)} against {fv(t0)} in the file; the difference is {' and '.join(parts)}."
+            line += f" {M['label']} adds up to {fv(t1)} against {fv(file_total)} in the file as read; the difference is {' and '.join(parts) or 'rounding'}."
     if fwords:
         line += f" Narrowed to rows where {' and '.join(fwords)}: {nf:,} rows."
     if period:
