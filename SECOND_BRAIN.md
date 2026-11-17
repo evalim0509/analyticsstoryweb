@@ -365,6 +365,10 @@ Recorded from the project owner. Newest entries at the bottom of each group.
   choice can be seen with one tap.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
+- R109. `PITCH_NOTES.md` is the pitch reference and is kept up to date: every
+  session that fixes a bug, finds a weakness, adds a feature or learns about a
+  competitor updates it in the same change (key points, strengths, weaknesses,
+  known bugs, market landscape, data-prep comparison).
 
 ## Business knowledge
 
@@ -443,6 +447,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | `PITCH_NOTES.md` expanded: key points from the three reviews, market landscape (Fathom, Syft, Reach, Power BI, Tableau Pulse, Zoho Zia, Julius, Arria, Datasette Lite, Evidence, RATH, LIDA), data-prep methodology comparison (OpenRefine, Easy Data Transform, KNIME, Data Wrangler, Exploratory, Datablist); rule to keep it updated (R109, CLAUDE.md). |
 | 2026-11-17 | Added `PITCH_NOTES.md`: strengths, weaknesses, known bugs B1–B5, competitor comparison, objection answers, demo script, claims to avoid and a pre-pitch checklist. No app changes. |
 | 2026-11-19 | Sample data now includes a mixed-currency file and a Sage export with Debit and Credit, so the currency stop and the sign choice show up with "Try with sample data". |
 | 2026-11-19 | Fixes A1–A8: report cleanup only for recognised exports (no lost sales or shifted rows); reconciliation starts from the file as read; mixed currencies blocked; debit/credit sign choice; margin over rows with cost only, with coverage; day/month order shown and changeable; since-last keyed on the whole story; table-aware field matches. New: combined date from two columns. |

@@ -15,6 +15,10 @@
    - Choices and their reasons go in the **Decisions** table.
    - Add a line to the **Change log** and update "Last updated".
 3. If a new instruction conflicts with something recorded, ask, then update the record.
+4. **Keep `PITCH_NOTES.md` up to date** in the same change whenever a bug is fixed or
+   found, a feature or weakness changes, or something is learned about a competitor:
+   move fixed bugs out of "Known bugs", adjust strengths and weaknesses, and update
+   "Last updated" at the top.
 
 ## Non-negotiables (from the owner)
 
