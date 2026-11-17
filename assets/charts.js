@@ -43,21 +43,38 @@ function baseOptions(many, horizontal, xTitle, yTitle) {
 }
 
 /* spec: {type, labels, series:[{name,data}], x_title, y_title}; type is bar | hbar | stacked | line */
+/* The height a chart will take, worked out before it is drawn so a card can open to its final size. */
+const narrowScreen = () => window.innerWidth < 760;
+function chartShape(spec) {
+  const longest = Math.max(0, ...(spec.labels || []).map((l) => String(l).length));
+  let type = spec.type || "bar";
+  if (type === "bar" && !spec.time && ((spec.labels || []).length > 9 || longest > 12) && spec.labels.length <= 40) type = "hbar";
+  return type;
+}
+function chartHeight(spec) {
+  if (!spec) return 320;
+  if (spec.type === "forecast") return 340;
+  if (spec.type === "share") return narrowScreen() ? 360 : 300;
+  if (chartShape(spec) !== "hbar") return 320;
+  const many = (spec.series || []).length > 1;
+  return Math.max(220, spec.labels.length * (many ? 16 * spec.series.length + 14 : 30) + 70);
+}
+
 const calm = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const GROW = { duration: 650, easing: "easeOutQuart" };
+const GROW = { duration: 1000, easing: "easeOutCubic" };
 
 /* Share of the total: a ring with at most six slices, each slice's share written in the legend. */
 function drawShare(canvas, spec) {
   const data = spec.series[0].data, total = data.reduce((a, b) => a + b, 0) || 1;
   const pct = (v) => Math.round((100 * v) / total) + "%";
-  const narrow = canvas.parentElement.clientWidth < 520;
+  const narrow = narrowScreen();
   canvas.parentElement.style.height = narrow ? "360px" : "300px";
   return new Chart(canvas, {
     type: "doughnut",
     data: { labels: spec.labels, datasets: [{ label: spec.series[0].name, data, borderColor: "#fff", borderWidth: 2,
       backgroundColor: spec.labels.map((l, i) => (l === "All others" ? "#c3c9d4" : SERIES[i])) }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: "62%", animation: spec.animate && !calm() ? GROW : false,
-      plugins: {
+      plugins: { whiteBackground: spec.clear ? false : {},
         legend: { position: narrow ? "bottom" : "right", labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2, color: INK, padding: 14,
           generateLabels: (chart) => Chart.overrides.doughnut.plugins.legend.labels.generateLabels(chart).map((l) => ({ ...l, text: `${l.text}  ${pct(data[l.index])}` })) } },
         tooltip: { backgroundColor: INK, padding: 10, cornerRadius: 6, boxPadding: 4, callbacks: { label: (c) => ` ${c.label}: ${fmtNum(c.parsed)} (${pct(c.parsed)})` } },
@@ -72,25 +89,24 @@ function drawChart(canvas, spec) {
   if (spec.type === "share") return drawShare(canvas, spec);
   const series = spec.series.slice(0, 8);
   const many = series.length > 1;
-  let type = spec.type || "bar";
-  const longest = Math.max(0, ...spec.labels.map((l) => String(l).length));
-  if (type === "bar" && !spec.time && (spec.labels.length > 9 || longest > 12) && spec.labels.length <= 40) type = "hbar";
+  const type = chartShape(spec);
   const horizontal = type === "hbar";
   const line = type === "line";
   const options = baseOptions(many, horizontal, horizontal ? spec.y_title : spec.x_title, horizontal ? spec.x_title : spec.y_title);
   if (type === "stacked") { options.scales.x.stacked = true; options.scales.y.stacked = true; }
   if (spec.animate && !calm()) options.animation = GROW;
+  if (spec.clear) options.plugins.whiteBackground = false;
   const datasets = series.map((s, i) => line
     ? { label: s.name, data: s.data, borderColor: SERIES[i], backgroundColor: SERIES[i], borderWidth: 2, cubicInterpolationMode: "monotone", spanGaps: true,
         pointRadius: spec.labels.length > 40 ? 0 : 2.5, pointHoverRadius: 5, pointBackgroundColor: SERIES[i], pointBorderColor: "#fff", pointBorderWidth: 1.5 }
     : { label: s.name, data: s.data, backgroundColor: spec.signed ? s.data.map((v) => (v < 0 ? SERIES[1] : SERIES[0])) : spec.emphasis === "last" ? s.data.map((_, k) => (k === s.data.length - 1 ? SERIES[0] : "#b9c6dc")) : SERIES[i], borderColor: "#fff", borderWidth: type === "stacked" ? 1 : 0,
         borderRadius: type === "stacked" ? 0 : 4, borderSkipped: "start", maxBarThickness: 30, categoryPercentage: 0.75, barPercentage: many ? 0.9 : 0.8 });
-  canvas.parentElement.style.height = (horizontal ? Math.max(220, spec.labels.length * (many ? 16 * series.length + 14 : 30) + 70) : 320) + "px";
+  canvas.parentElement.style.height = chartHeight(spec) + "px";
   return new Chart(canvas, { type: line ? "line" : "bar", data: { labels: spec.labels, datasets }, options, plugins: [whiteBackground] });
 }
 
 /* Forecast: past values, the forecast, and the band where the result will probably land. */
-function drawForecast(canvas, r, animate) {
+function drawForecast(canvas, r, animate, clear) {
   const old = Chart.getChart(canvas);
   if (old) old.destroy();
   const past = r.history.slice(-48);
@@ -99,6 +115,7 @@ function drawForecast(canvas, r, animate) {
   const last = past[past.length - 1].value;
   const options = baseOptions(true, false, "", r.label);
   if (animate && !calm()) options.animation = GROW;
+  if (clear) options.plugins.whiteBackground = false;
   options.plugins.legend.labels.filter = (item) => item.text !== "low";
   options.plugins.tooltip.filter = (c) => c.dataset.label !== "low" && c.parsed.y !== null;
   options.plugins.tooltip.callbacks.label = (c) => {

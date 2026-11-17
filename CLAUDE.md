@@ -29,6 +29,8 @@
   cannot support is hidden completely: only facts, no assumptions. Each card is sentence first, then
   chart, then table. Keep whitespace generous; do not add panels, tiles or extra controls
   to the story page. Ask, builder, predictions and data check live behind "Explore further".
+- The first page is the story cards, empty until data is added. The audience is not technical:
+  every step has one big button, and details are folded behind "Show details".
 
 ## How it is built
 

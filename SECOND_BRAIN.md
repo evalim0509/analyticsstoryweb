@@ -158,10 +158,38 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R51. In a story card the topic word (What, Who...) is the heading: large, bold,
   dark. The one-line finding sits under it as the subtitle: smaller and grey,
   growing a little when the card opens. The two must be easy to tell apart.
-- R52. While a card is hovered or open, pale blue hues drift slowly inside the
+- R52. (Replaced by R58.) While a card is hovered or open, pale blue hues drift slowly inside the
   card's shape (about 15 seconds a pass). They must stay light enough not to
   disturb reading; charts and tables keep a solid white backing. The subject
   choice cards do the same on hover.
+- R53. The first page is the story cards themselves, all six shown empty as a
+  preview. Above them: the Gist orb, one line ("Add your data and get the
+  gist"), one big "Add your data" button and a small "Try with sample data"
+  link. Opening an empty card shows one line about what it will tell and the
+  same big button. After data is added, only cards the data supports appear
+  (R33).
+- R54. Adding files is three plain steps with a progress bar and one big button
+  each: 1 "I found N tables in your files" (Looks right, continue); 2 "I found N
+  things to tidy" (Fix them all, or Skip for now; skipped when there is nothing
+  to tidy); 3 "What do you want to understand?". Names, fields, previews and
+  explanations are folded behind "Show details". The audience is not technical
+  and has no data knowledge.
+- R55. "Your data" has one big "Fix all" button at the top. It applies safe
+  fixes only (repeated rows, spelling variants, date formats, linking tables
+  that belong together). Items that need judgement, such as unusually large
+  values, stay listed with their own buttons; details are folded away. The
+  "Text I can search" list is removed from this page.
+- R56. The Gist icon is an orb matching the owner's reference image: a soft,
+  edgeless glow with a deep blue core, cyan on the right, violet below, mint
+  and a bright white crescent on the left, slowly turning and breathing. It is
+  the logo in the top bar, the large orb on the first page, and the waiting
+  animation during the steps.
+- R57. Opening a story card is slow and smooth (about 1.2 seconds on one gentle
+  curve). The opened card's heading stays steady and, if low on screen, is
+  carried up along one eased curve.
+- R58. The colour in a hovered or open card sits on its right edge: the orb's
+  blue, cyan and violet, much fainter, rolling like waves with soft ripples.
+  On touch screens it shows only on the open card.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. Tapping one goes straight to the story.
 
@@ -204,6 +232,8 @@ that matter, who uses the output.
 | 2026-11-17 | Why shows one grouping at a time. By default it is the grouping whose two largest movers explain the biggest part of all movement, preferring groupings with 3 to 20 groups. The reader can switch it. | Contributions from different groupings overlap, so mixing them in one sentence would double count. |
 | 2026-11-17 | A target or budget is only compared with the number it names ("Sales Target" with Sales Amount, never with Quantity). A target with no subject in its name is read as the main number's target. | R33. Found when changing the number became one click. |
 | 2026-11-17 | Share-of-total charts are rings with at most five named slices plus "All others". | Readability; more slices cannot be told apart. |
+| 2026-11-17 | The Dribbble orb reference could not be read from the build environment (the site blocks automated visits), so the orb was matched to a screenshot the owner uploaded. | Owner's choice to share the image. |
+| 2026-11-17 | The chart in an open card is drawn about 0.4 seconds into the opening, and its space is reserved in advance. | Drawing during the first frames made the opening stutter, and late sizing made it jump. |
 | 2026-11-17 | Work for Gist was built on branch `claude/gist-story`; `main` (the live site) changes only when the owner approves. | The owner reviews before publishing. |
 | 2026-11-16 | The story project lives in its own repository, `evalim0509/analyticsstoryweb` (branch `main`). `analyticschatbotv1` keeps the original three-tab version. | Owner's choice, so the two products can evolve separately. |
 
@@ -228,6 +258,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | First page is now the empty story cards under the Gist orb; adding files is three big-button steps with details folded; Your data has one "Fix all" and no text list; slower, steadier card opening; colour waves on the right edge of cards; orb logo. |
 | 2026-11-17 | Story cards: topic word as a bold heading with the finding as a grey subtitle under it; slow drifting blue hues inside hovered and open cards. Printed briefing tidied. |
 | 2026-11-17 | Story and subject choices restyled as outlined white cards with arrival, lift, expand and flow-in motion; slower eased auto-scroll; frosted top bar; phone layout pass; footer note and start-page notes removed; business-year choice moved behind "Explore further". Fixed the data check's side list, whose layout had been disturbed by the card edge buttons sharing its style name. |
 | 2026-11-17 | Renamed to Gist. Added the Why card; cards the data cannot support are hidden; glide animation and numbered cards; edge buttons to change the number, grouping and chart; sentences rewritten in a boardroom voice; forecast labelled as an estimate; reader-chosen business year start; header privacy badge removed; "A look at ...". Targets no longer compared with the wrong number. |
