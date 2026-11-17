@@ -443,6 +443,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-17 | Added `PITCH_NOTES.md`: strengths, weaknesses, known bugs B1–B5, competitor comparison, objection answers, demo script, claims to avoid and a pre-pitch checklist. No app changes. |
 | 2026-11-19 | Sample data now includes a mixed-currency file and a Sage export with Debit and Credit, so the currency stop and the sign choice show up with "Try with sample data". |
 | 2026-11-19 | Fixes A1–A8: report cleanup only for recognised exports (no lost sales or shifted rows); reconciliation starts from the file as read; mixed currencies blocked; debit/credit sign choice; margin over rows with cost only, with coverage; day/month order shown and changeable; since-last keyed on the whole story; table-aware field matches. New: combined date from two columns. |
 | 2026-11-18 | Story cards: coloured ▲/▼ chips in sentences, big headline figure, bold bullets with arrows, highlighted charts with values on bars, short tables with arrows and share bars. |
