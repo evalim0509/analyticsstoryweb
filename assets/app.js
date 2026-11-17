@@ -60,7 +60,7 @@ function downloadCsv(name, columns, rows) {
 }
 
 // ---------------------------------------------------------------- the engine
-const worker = new Worker("assets/worker.js?v=2026-11-18.2");
+const worker = new Worker("assets/worker.js?v=2026-11-18.3");
 const waiting = new Map();
 let seq = 0, engineReady = false;
 worker.onmessage = (e) => {
@@ -219,13 +219,13 @@ const orbEl = (size) => h("span", { class: "orb " + (size || ""), "aria-hidden":
 document.querySelectorAll("[data-orb]").forEach((el) => el.replaceWith(orbEl(el.dataset.orb)));
 const aura = () => h("span", { class: "aura", "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("b"), h("b"));
 // The progress bar: each part is a button that takes you back (or forward) to that step once your data is in.
-const STEP_NAMES = ["Your files", "Match your fields", "Tidy", "Quick checks", "Choose what to understand"];
+const STEP_NAMES = ["Your files", "Match your fields", "Tidy", "Choose what to understand"];
 function stepper(n) {
   const back = n === 1 ? leaveFlow : () => goStep(n - 1);
   return h("nav", { class: "stepper", "aria-label": "Steps" },
     h("button", { class: "back small-back", title: n === 1 ? "Back" : `Back to step ${n - 1}`, onclick: back }, h("span", { "aria-hidden": "true" }, "←"), " Back"),
-    h("span", {}, `Step ${n} of 5`),
-    h("span", { class: "bars" }, [1, 2, 3, 4, 5].map((i) => h("button", {
+    h("span", {}, `Step ${n} of 4`),
+    h("span", { class: "bars" }, [1, 2, 3, 4].map((i) => h("button", {
       class: (i <= n ? "on" : "") + (i === n ? " cur" : ""), title: STEP_NAMES[i - 1], "aria-label": `Step ${i}: ${STEP_NAMES[i - 1]}`,
       "aria-current": i === n ? "step" : null, disabled: i !== n && (!S.state || (S.pending && i > 1)) ? true : null,
       onclick: () => { if (i !== n) goStep(i); } }, h("i")))));
@@ -250,7 +250,7 @@ function bestCatalogue(columnNames) {
   return best;
 }
 function downloadCatalogue(c) {
-  download(`${c.name}.gist-catalogue.json`, new Blob([JSON.stringify({ gist_catalogue: 1, name: c.name, fields: c.fields, custom: c.custom || [] }, null, 2)], { type: "application/json" }));
+  download(`${c.name}.gist-catalogue.json`, new Blob([JSON.stringify({ gist_catalogue: 1, name: c.name, fields: c.fields, custom: c.custom || [], kinds: c.kinds || {} }, null, 2)], { type: "application/json" }));
 }
 function loadCatalogueFile(done) {
   const input = h("input", { type: "file", accept: ".json,application/json", hidden: true });
@@ -259,7 +259,7 @@ function loadCatalogueFile(done) {
       const o = JSON.parse(await input.files[0].text());
       if (!o || !o.gist_catalogue || !o.name || typeof o.fields !== "object") throw new Error("not a Gist catalogue");
       const list = catalogues().filter((c) => c.name !== o.name);
-      list.push({ id: "c" + Date.now(), name: String(o.name).slice(0, 60), fields: o.fields, custom: Array.isArray(o.custom) ? o.custom : [] });
+      list.push({ id: "c" + Date.now(), name: String(o.name).slice(0, 60), fields: o.fields, custom: Array.isArray(o.custom) ? o.custom : [], kinds: o.kinds && typeof o.kinds === "object" ? o.kinds : {} });
       saveCatalogues(list); toast(`Loaded the “${o.name}” catalogue.`); done && done();
     } catch (err) { toast("That file is not a Gist catalogue."); }
     input.remove();
@@ -267,85 +267,149 @@ function loadCatalogueFile(done) {
   document.body.append(input); input.click();
 }
 
-// Step 2: what Gist needs, matched to what your files call it. Starts from the best saved catalogue, or Gist's guesses.
-async function stepMatch(review) {
+// Step 2: what Gist needs, matched to what your files call it, and how each number is used.
+// Returning users whose saved catalogue fits see a one-line page; everyone can go with Gist's guesses in one tap.
+const PLAIN = { date: "The date", sales: "Sales", qty: "Quantity", cost: "Cost", customer: "Customer", product: "Product",
+                order: "Order number", region: "Where", rep: "Salesperson", target: "Target or budget" };
+const NUMBER_NEEDS = ["sales", "qty", "cost", "target"];
+async function stepMatch(review, forceFull) {
   busy("Reading your column names…");
-  const r = await call("catalogue_start");
+  const [r, chk] = await Promise.all([call("catalogue_start"), call("story_checks")]);
   const names = r.columns.map((c) => c.name);
-  const picked = (review && S.catalogue && catalogues().find((c) => c.id === S.catalogue)) || bestCatalogue(names);
+  const saved = (review && S.catalogue && catalogues().find((c) => c.id === S.catalogue)) || bestCatalogue(names);
+  // how each number column is used: added up, or averaged (from the saved catalogue, else Gist's guess)
+  const kinds = {};
+  for (const t of chk.tables) for (const m of t.measures) if (!(m.name in kinds)) kinds[m.name] = m.kind;
+  const main = chk.tables[0] || {};
+  let complete = main.last_month ? main.complete : null;
+  let current = saved, fields = {}, custom = [];
   const fill = (cat) => {
-    const f = {};
+    fields = {};
     for (const n of r.needs) {
       const v = cat ? (cat.fields || {})[n.key] : (review && Object.keys(S.roles).length ? S.roles[n.key] : r.guess[n.key]);
-      f[n.key] = v && names.includes(v) ? v : "";
+      fields[n.key] = v && names.includes(v) ? v : "";
     }
-    return f;
+    custom = (cat ? cat.custom || [] : review ? S.custom : []).map((c) => ({ ...c }));
+    if (cat && cat.kinds) for (const [col, k] of Object.entries(cat.kinds)) if (col in kinds) kinds[col] = k;
   };
-  let current = picked, fields = fill(picked), custom = (picked ? picked.custom || [] : S.custom).map((c) => ({ ...c }));
-  const tablesOf = [...new Set(r.columns.map((c) => c.table))];
-  const columnSelect = (value, onChange, label) => {
-    const sel = h("select", { class: "match-select", "aria-label": label, onchange: (e) => onChange(e.target.value) },
-      h("option", { value: "" }, "— not in my files —"),
-      tablesOf.map((t) => h("optgroup", { label: t }, r.columns.filter((c) => c.table === t).map((c) => h("option", { value: c.name, selected: c.name === value }, c.name)))));
-    sel.classList.toggle("empty", !value);
-    sel.addEventListener("change", () => sel.classList.toggle("empty", !sel.value));
-    return sel;
+  fill(saved);
+
+  const finish = async (btn) => {
+    document.querySelectorAll("#view-flow .match-go").forEach((b) => (b.disabled = true));
+    S.roles = { ...fields }; S.custom = custom.filter((c) => c.label && c.column); S.catalogue = current ? current.id : null;
+    const answers = chk.tables.map((t, i) => ({ dataset: t.dataset, kinds: Object.fromEntries(t.measures.map((m) => [m.name, kinds[m.name]])),
+      date: fields.date && t.dates.includes(fields.date) ? fields.date : t.date, complete: i === 0 && t.last_month ? complete : null }));
+    await call("catalogue_set", { roles: S.roles });
+    const res = await call("story_set_checks", { answers });
+    S.pick = { ...(S.pick || {}), options: res.options };
+    if (S.story) S.story.fresh = true;
+    sendGlossary();
+    stepTidy();
   };
-  const list = h("div", { class: "match-list" });
-  const drawList = () => list.replaceChildren(...[
-    h("div", { class: "match-head" }, h("span", {}, "What Gist needs"), h("span", {}, "What you have")),
-    r.needs.map((n) => h("div", { class: "match-row" },
-      h("div", { class: "match-need" }, h("b", {}, n.label), h("span", {}, n.hint)),
-      columnSelect(fields[n.key], (v) => (fields[n.key] = v), n.label))),
-    custom.map((c, i) => h("div", { class: "match-row custom" },
-      h("div", { class: "match-need" }, h("input", { type: "text", value: c.label || "", placeholder: "Your field, e.g. Project code", "aria-label": "Field name", oninput: (e) => (c.label = e.target.value) }),
-        h("button", { class: "link", onclick: () => { custom.splice(i, 1); drawList(); } }, "Remove")),
-      columnSelect(c.column, (v) => (c.column = v), c.label || "Your field"))),
-    h("button", { class: "link add-field", onclick: () => { custom.push({ label: "", column: "" }); drawList(); } }, "+ Add a field")].flat());
-  drawList();
+  const goBtn = () => h("button", { class: "primary big match-go", onclick: (e) => finish(e.target) }, "Looks right, continue");
+
+  // returning user: one line, one button
+  const matchedNow = Object.values(fields).filter(Boolean);
+  if (saved && !review && !forceFull && matchedNow.length) {
+    flowPage(2,
+      h("h1", { class: "ask-big" }, `I used your “${saved.name}” catalogue.`),
+      h("p", { class: "frame" }, `It matched ${plural(matchedNow.length, "field")}, such as ${matchedNow.slice(0, 3).join(", ")}.`),
+      h("div", { class: "flow-actions" }, goBtn(), h("button", { class: "link", onclick: () => stepMatch(true, true) }, "Review the matches")));
+    return;
+  }
+
+  const options = (value) => h("select", { class: "pill-select", "aria-label": "What you have" },
+    h("option", { value: "" }, "Not in my files"),
+    [...new Set(r.columns.map((c) => c.table))].map((t) => h("optgroup", { label: t }, r.columns.filter((c) => c.table === t).map((c) => h("option", { value: c.name, selected: c.name === value }, c.name)))));
+  const kindTag = (col) => {
+    if (!col || !(col in kinds)) return null;
+    const tag = h("button", { class: "kind-tag", type: "button" });
+    const draw = () => { tag.replaceChildren(kinds[col] === "rate" ? "averaged" : "added up", h("span", {}, " · change")); tag.title = kinds[col] === "rate" ? "Averaged, like a price or a percentage. Tap to add it up instead." : "Added up, like money or a count. Tap to average it instead."; };
+    tag.addEventListener("click", () => { kinds[col] = kinds[col] === "rate" ? (/qty|quantity|count|units/i.test(col) ? "count" : "money") : "rate"; draw(); });
+    draw();
+    return tag;
+  };
+  const monthTag = () => {
+    if (!main.last_month) return null;
+    const tag = h("button", { class: "kind-tag", type: "button" });
+    const draw = () => tag.replaceChildren(`${main.last_month} ${complete ? "is complete" : "is still running"}`, h("span", {}, " · change"));
+    tag.title = main.why || "";
+    tag.addEventListener("click", () => { complete = !complete; draw(); });
+    draw();
+    return tag;
+  };
+  const row = (label, key, extraFor) => {
+    const sel = options(fields[key]);
+    const extras = h("div", { class: "match-extra" });
+    const drawExtra = () => extras.replaceChildren(key === "date" && fields.date ? monthTag() : null, NUMBER_NEEDS.includes(key) ? kindTag(fields[key]) : null);
+    sel.addEventListener("change", () => { fields[key] = sel.value; drawExtra(); });
+    drawExtra();
+    return h("div", { class: "mrow" }, h("div", { class: "mneed" }, label), h("div", { class: "mhave" }, sel, extras));
+  };
+  const body = h("div", { class: "match-body" });
+  const draw = () => {
+    const found = r.needs.filter((n) => fields[n.key]), missing = r.needs.filter((n) => !fields[n.key]);
+    const used = new Set(Object.values(fields).filter(Boolean));
+    const others = Object.keys(kinds).filter((c) => !used.has(c));
+    body.replaceChildren(
+      h("div", { class: "mcols" }, h("span", {}, "What Gist needs"), h("span", {}, "What you have")),
+      found.map((n) => row(PLAIN[n.key] || n.label, n.key)),
+      custom.filter((c) => c.label).map((c) => h("div", { class: "mrow" }, h("div", { class: "mneed" }, c.label), h("div", { class: "mhave" }, (() => { const s2 = options(c.column); s2.addEventListener("change", () => (c.column = s2.value)); return s2; })()))),
+      missing.length ? h("details", { class: "mfold" }, h("summary", {}, `Not in your files (${missing.length}): ${missing.map((n) => PLAIN[n.key] || n.label).join(", ")}`),
+        h("p", { class: "muted" }, "If one of these is in your files under another name, pick it."),
+        missing.map((n) => row(PLAIN[n.key] || n.label, n.key))) : null,
+      others.length ? h("details", { class: "mfold" }, h("summary", {}, `Other numbers (${others.length}): ${others.join(", ")}`),
+        h("p", { class: "muted" }, "How Gist uses these when you pick one as the subject."),
+        others.map((c) => h("div", { class: "mrow" }, h("div", { class: "mneed" }, c), h("div", { class: "mhave" }, kindTag(c))))) : null,
+      h("div", { class: "madd" }, (() => {
+        const box = h("span", {});
+        const show = () => box.replaceChildren(h("button", { class: "link", onclick: ask }, "+ Add a field of your own"));
+        const ask = () => {
+          const name = h("input", { type: "text", placeholder: "e.g. Project code", "aria-label": "Your field" });
+          const sel = options("");
+          const ok = () => { if (name.value.trim() && sel.value) { custom.push({ label: name.value.trim(), column: sel.value }); draw(); } else name.focus(); };
+          box.replaceChildren(name, sel, h("button", { class: "secondary", onclick: ok }, "Add"), h("button", { class: "link", onclick: show }, "Cancel"));
+          name.focus();
+        };
+        show();
+        return box;
+      })()));
+  };
+  draw();
+
   const chooser = h("select", { class: "cat-choose", "aria-label": "Catalogue", onchange: (e) => {
-    current = catalogues().find((c) => c.id === e.target.value) || null;
-    fields = fill(current); custom = (current ? current.custom || [] : []).map((c) => ({ ...c })); drawList(); drawSave();
+    current = catalogues().find((c) => c.id === e.target.value) || null; fill(current); draw(); drawSave();
   } }, h("option", { value: "" }, "Gist's guesses"), catalogues().map((c) => h("option", { value: c.id, selected: current && c.id === current.id }, c.name)));
   const saveBox = h("div", { class: "cat-save" });
+  const catKinds = () => Object.fromEntries(Object.entries(kinds));
   const drawSave = (asking) => {
     if (asking) {
       const name = h("input", { type: "text", placeholder: "Name it, e.g. Accounting", "aria-label": "Catalogue name", value: asking === "new" ? "" : (current || {}).name || "" });
       const ok = () => {
         const nm = name.value.trim(); if (!nm) { name.focus(); return; }
-        const all = catalogues();
-        const keep = { id: (asking === "update" && current) ? current.id : "c" + Date.now(), name: nm, fields: { ...fields }, custom: custom.filter((c) => c.label && c.column) };
-        saveCatalogues([...all.filter((c) => c.id !== keep.id && c.name !== nm), keep]);
+        const keep = { id: (asking === "update" && current) ? current.id : "c" + Date.now(), name: nm, fields: { ...fields }, custom: custom.filter((c) => c.label && c.column), kinds: catKinds() };
+        saveCatalogues([...catalogues().filter((c) => c.id !== keep.id && c.name !== nm), keep]);
         current = keep; chooser.append(h("option", { value: keep.id }, nm)); chooser.value = keep.id;
-        toast(`Saved as “${nm}”. Gist will use it whenever these column names appear.`); drawSave();
+        toast(`Saved as “${nm}”. Next time Gist will fill this in for you.`); drawSave();
       };
       name.addEventListener("keydown", (e) => { if (e.key === "Enter") ok(); });
       saveBox.replaceChildren(name, h("button", { class: "secondary", onclick: ok }, "Save"), h("button", { class: "link", onclick: () => drawSave() }, "Cancel"));
       setTimeout(() => name.focus(), 30);
     } else {
-      saveBox.replaceChildren(...[
+      saveBox.replaceChildren(
         current ? h("button", { class: "secondary", onclick: () => drawSave("update") }, `Save changes to “${current.name}”`) : null,
-        h("button", { class: current ? "link" : "secondary", onclick: () => drawSave("new") }, current ? "Save as a new catalogue" : "Save as a catalogue")].filter(Boolean));
+        h("button", { class: current ? "link" : "secondary", onclick: () => drawSave("new") }, current ? "Save as a new catalogue" : "Save these matches as a catalogue"));
     }
   };
   drawSave();
-  const go = h("button", { class: "primary big", onclick: async () => {
-    go.disabled = true;
-    S.roles = { ...fields }; S.custom = custom.filter((c) => c.label && c.column); S.catalogue = current ? current.id : null;
-    const res = await call("catalogue_set", { roles: S.roles });
-    S.pick = { ...(S.pick || {}), options: res.options };
-    sendGlossary();
-    stepTidy();
-  } }, "Looks right, continue");
   const found = Object.values(fields).filter(Boolean).length;
   flowPage(2,
     h("h1", { class: "ask-big" }, "Match your fields"),
-    h("p", { class: "frame" }, picked ? `I used your “${picked.name}” catalogue. ` : `I matched ${found} of ${r.needs.length} from your column names. `, "Change anything that is wrong; leave what you don't have."),
-    h("div", { class: "cat-bar" }, h("label", {}, "Using ", chooser)),
-    list,
-    h("div", { class: "flow-actions" }, go, saveBox),
-    h("details", { class: "flow-more" }, h("summary", {}, "What is this?"),
-      h("p", { class: "muted" }, "Every system names things differently: one says Customer ID, another Client Number or Debtor Code. Matching tells Gist which column is which, so the cards use the right fields. The story keeps your own column names. Save it as a catalogue (for example “Accounting”) and Gist will fill this in for you next time. Catalogues hold column names only, never your data.")));
+    h("p", { class: "frame" }, current ? `Filled in from your “${current.name}” catalogue.` : `I found ${found} of the ${r.needs.length} things I look for.`, " If it looks right, just continue."),
+    h("div", { class: "flow-actions at-top" }, goBtn()),
+    h("div", { class: "cat-bar" }, h("label", {}, "Starting from ", chooser)),
+    body,
+    h("div", { class: "flow-actions" }, goBtn(), saveBox));
 }
 
 function goStep(i) {
@@ -353,49 +417,14 @@ function goStep(i) {
   if (i === 1) reviewFiles();
   else if (i === 2) stepMatch(true);
   else if (i === 3) stepTidy(true);
-  else if (i === 4) stepChecks();
   else show("pick");
 }
 
-// Step 3: three quick checks, each with Gist's best guess already picked.
-const KIND_WORDS = [["money", "Money"], ["count", "A count or quantity"], ["rate", "An average or rate"]];
 function seg(options, value, onPick, label) {
   const wrap = h("div", { class: "seg", role: "radiogroup", "aria-label": label });
   const draw = (v) => wrap.replaceChildren(...options.map(([k, text]) => h("button", { type: "button", role: "radio", "aria-checked": String(k === v), onclick: () => { draw(k); onPick(k); } }, text)));
   draw(value);
   return wrap;
-}
-async function stepChecks() {
-  busy("Getting the quick checks ready…");
-  const r = await call("story_checks");
-  if (!r.tables.length) { show("pick"); return; }
-  const answers = r.tables.map((t) => ({ dataset: t.dataset, kinds: Object.fromEntries(t.measures.map((m) => [m.name, m.kind])), date: t.date, complete: t.last_month ? t.complete : null }));
-  const blocks = r.tables.map((t, ti) => {
-    const a = answers[ti];
-    return h("div", { class: "checks" },
-      r.tables.length > 1 ? h("h2", { class: "check-table" }, t.name) : null,
-      h("div", { class: "check" }, h("h3", {}, "What kind of number is each one?"),
-        h("p", { class: "muted" }, "Money and counts are added up. Averages and rates (prices, percentages, scores) are averaged instead."),
-        t.measures.map((m) => h("div", { class: "check-row" }, h("span", { class: "check-name" }, m.name), seg(KIND_WORDS, m.kind, (k) => (a.kinds[m.name] = k), m.name)))),
-      t.dates.length ? h("div", { class: "check" }, h("h3", {}, "Which date should the story follow?"),
-        t.dates.length > 1 ? h("select", { class: "check-select", onchange: (e) => (a.date = e.target.value) }, t.dates.map((d) => h("option", { selected: d === t.date }, d)))
-          : h("p", {}, "It will follow ", h("strong", {}, t.date), ".")) : null,
-      t.last_month ? h("div", { class: "check" }, h("h3", {}, `Is ${t.last_month} complete?`),
-        seg([[true, "Yes, it is complete"], [false, "No, it is still running"]], t.complete, (k) => (a.complete = k), "Last month complete"),
-        h("p", { class: "muted" }, "Gist's guess: " + t.why.replace(/^You (confirmed|said).*$/, ""))) : null);
-  });
-  const go = h("button", { class: "primary big", onclick: async () => {
-    go.disabled = true;
-    const res = await call("story_set_checks", { answers });
-    S.pick = { options: res.options, tidy: (S.pick || {}).tidy || {} };
-    if (S.story) S.story.fresh = true;
-    show("pick");
-  } }, "Looks right, continue");
-  flowPage(4,
-    h("h1", { class: "ask-big" }, "Three quick checks"),
-    h("p", { class: "frame" }, "I have picked my best guess for each. Change anything that is wrong, then continue."),
-    blocks,
-    h("div", { class: "flow-actions" }, go));
 }
 // Step 1 again, once the data is in: what was added, with the details folded away.
 function reviewFiles() {
@@ -520,12 +549,12 @@ async function stepTidy(review) {
   const o = await call("story_options");
   S.pick = o;
   const t = o.tidy, n = t.fixes + t.links;
-  if (!n && !review) { stepChecks(); return; }
+  if (!n && !review) { show("pick"); return; }
   if (!n) {
     flowPage(3,
       h("h1", { class: "ask-big" }, "Everything is tidy."),
       h("p", { class: "frame" }, t.to_review ? `${plural(t.to_review, "item")} still need${t.to_review === 1 ? "s" : ""} a person's judgement, such as unusually large values. They are not changed.` : "There is nothing left to fix."),
-      h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => stepChecks() }, "Continue"),
+      h("div", { class: "flow-actions" }, h("button", { class: "primary big", onclick: () => show("pick") }, "Continue"),
         t.to_review ? h("button", { class: "link", onclick: () => show("data") }, "Look at them") : null));
     return;
   }
@@ -534,12 +563,12 @@ async function stepTidy(review) {
     const r = await atLeast(MIN_WAIT, call("story_tidy"));
     S.checks = {}; setState(r.state); S.pick = { options: r.options, tidy: r.tidy };
     toast(`${plural(r.done.length, "fix", "fixes")} applied.`);
-    stepChecks();
+    show("pick");
   } }, "Fix them all");
   flowPage(3,
     h("h1", { class: "ask-big" }, `I found ${plural(n, "thing")} to tidy.`),
     h("p", { class: "frame" }, "Tidying makes the story more accurate. Your original files are not changed."),
-    h("div", { class: "flow-actions" }, fix, h("button", { class: "link", onclick: () => stepChecks() }, "Skip for now")),
+    h("div", { class: "flow-actions" }, fix, h("button", { class: "link", onclick: () => show("pick") }, "Skip for now")),
     h("details", { class: "flow-more" }, h("summary", {}, "Show details"),
       h("ul", {},
         t.fixes ? h("li", {}, `${plural(t.fixes, "safe fix", "safe fixes")}, such as repeated rows, names spelt in different ways, or dates written in different formats.`) : null,
@@ -1080,7 +1109,7 @@ async function renderPick() {
     return card;
   }));
   root.replaceChildren(h("div", { class: "flow arrive" },
-    stepper(5),
+    stepper(4),
     h("h1", { class: "ask-big" }, "What do you want to understand?"),
     h("p", { class: "frame" }, options.length ? "Pick one. You can change it at any time." : "I did not find a table with numbers to build a story from. Your documents are still searchable under Explore further.")),
     options.length ? wrap : null);
@@ -1131,15 +1160,15 @@ async function renderStory() {
     h("p", { class: "frame controls" }, h("span", { class: "grp" }, "A look at ", options.length > 1 || !listed ? subject : h("strong", {}, st.label)),
       period ? [" ", h("span", { class: "grp" }, "in ", period)] : null, filter ? [" ", h("span", { class: "grp" }, "for ", filter)] : null),
     h("div", { class: "print-title" }, h("h1", {}, st.title), h("p", {}, `Prepared ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })} from ${st.source}`)),
-    h("details", { class: "recon" }, h("summary", {}, st.reconcile.line),
-      renderTable(st.reconcile.columns, st.reconcile.steps.map((r) => [r[0], r[1], r[2] === null || r[2] === undefined ? null : Math.round(r[2] * 100) / 100]), ["text", "number", "number"], { dash: true })),
     last ? h("p", { class: "since-top" }, `Compared with your last briefing on ${fmtDay(last.date)} (${last.period}). `,
       h("button", { class: "link", onclick: () => { forgetBriefing(); renderStory(); } }, "Forget it")) : null,
     caution ? h("p", { class: "caution" }, caution.why + " ", h("button", { class: "link", onclick: () => show("data") }, "Review now")) : null,
     h("div", { class: "scards" + (S.story.arrived ? "" : " arrive") }, cards),
     h("div", { class: "story-foot" },
       h("button", { class: "primary big", onclick: () => openShare(st) }, "Share the briefing"),
-      S.explore ? yearSel : null)].filter(Boolean));
+      S.explore ? yearSel : null),
+    h("details", { class: "recon" }, h("summary", {}, st.reconcile.line),
+      renderTable(st.reconcile.columns, st.reconcile.steps.map((r) => [r[0], r[1], r[2] === null || r[2] === undefined ? null : Math.round(r[2] * 100) / 100]), ["text", "number", "number"], { dash: true }))].filter(Boolean));
   S.story.arrived = true;
   openCard(S.story.open, false);
 }

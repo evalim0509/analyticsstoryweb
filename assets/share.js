@@ -3,7 +3,7 @@
    After a briefing is shared, only its headline figures are kept, for "since your last briefing". */
 "use strict";
 
-const SHARE_V = "2026-11-18.2";
+const SHARE_V = "2026-11-18.3";
 const loaded = {};
 function loadScript(src) {
   if (!loaded[src]) loaded[src] = new Promise((ok, fail) => {

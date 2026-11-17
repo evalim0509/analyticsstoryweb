@@ -297,6 +297,22 @@ Recorded from the project owner. Newest entries at the bottom of each group.
 - R89. Matched fields tell Gist which column is which (date, sales, cost,
   customer and so on); stories keep the owner's own column names. Matches also
   teach the Ask feature those words (shown in Business words as "Data catalogue").
+- R90. Steps after adding files are four: 1 Files, 2 Match your fields, 3 Tidy,
+  4 Choose. The quick checks (R76) are part of Match your fields: each number
+  row has an "added up / averaged · change" tag, the date row has "<month> is
+  complete · change", and other number columns sit in a folded "Other numbers"
+  list with the same tag. (Replaces the separate quick-checks step.)
+- R91. Match your fields is two plain columns, "What Gist needs" and "What you
+  have", in plain words (The date, Sales, Customer, Where...). Only what Gist
+  found is shown; each match is a pill to tap and change. Needs not found are
+  folded under "Not in your files (n)"; "+ Add a field of your own" adds one.
+  "Looks right, continue" is at the top and at the bottom, so people can go with
+  Gist's guesses in one tap.
+- R92. Returning users: when a saved catalogue fits the new file, step 2 is a
+  one-line page, "I used your “Accounting” catalogue", with one big Continue and
+  a "Review the matches" link. Catalogues also remember added-up / averaged.
+- R93. The reconciliation line ("From 1,783 rows in ...") sits at the bottom of
+  the story page, under the Share button.
 - R50. The choices on "What do you want to understand?" use the same card
   design and motion. (Tapping now opens the card first; see R61.)
 
@@ -372,6 +388,7 @@ that matter, who uses the output.
 
 | Date | Change |
 |---|---|
+| 2026-11-18 | Quick checks merged into Match your fields (four steps); matching redesigned as two plain columns with pills and tags, Continue at top and bottom; one-line page for returning users; catalogues keep added-up/averaged; reconciliation line moved to the bottom of the story. |
 | 2026-11-18 | Data catalogues: Match your fields step, saved named catalogues (download and load), Catalogues tab, matched fields used by the engine and taught to Ask. "A look at" line made the headline; reconciliation made small. Fixed stray "null" text on some screens. |
 | 2026-11-18 | Quick checks step; reconciliation line; calendar month-end; averages for rates; ID-based duplicate removal; since-last-briefing figures; PDF, slides, email draft and copy-for-email export; derived measures and Make a measure; preparer's notes; accounting export templates (Xero, QuickBooks, AutoCount, SQL Account, SAP B1, Sage, MYOB) with dummy samples. Fixed: the header buttons (Explore further, Add files, Business words) had been pushed off screen by the scroll-planning copy's class name. |
 | 2026-11-17 | First-page wave band narrowed on phones; step 3 "preparing your story" screen shortened to about 2 seconds. |
